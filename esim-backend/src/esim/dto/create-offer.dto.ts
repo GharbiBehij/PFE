@@ -1,0 +1,43 @@
+
+import {ApiProperty} from '@nestjs/swagger'
+import {IsInt,IsNotEmpty,IsString} from 'class-validator'
+
+
+
+
+export class CreateOfferDto {
+  @ApiProperty({
+  type: 'string',
+})
+@IsNotEmpty()
+@IsString()
+country: string ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+@IsNotEmpty()
+@IsInt()
+dataVolume: number ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+@IsNotEmpty()
+@IsInt()
+validityDays: number ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+@IsNotEmpty()
+@IsInt()
+price: number ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+@IsNotEmpty()
+@IsInt()
+InternalMargin: number ;
+}

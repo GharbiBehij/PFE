@@ -1,0 +1,9 @@
+﻿src/app/app.controller.spec.ts(19,28): error TS2339: Property 'getHello' does not exist on type 'AppController'.
+src/auth/auth.controller.ts(20,32): error TS2339: Property 'userService' does not exist on type 'AuthController'.
+src/auth/auth.controller.ts(23,29): error TS2339: Property 'userService' does not exist on type 'AuthController'.
+src/auth/auth.controller.ts(25,17): error TS2339: Property 'generateAndSaveTokens' does not exist on type 'AuthController'.
+src/user/user.repository.ts(16,42): error TS2322: Type '{ name: string; email: string; passportId: string; hashedPassword: string; }' is not assignable to type '(Without<UserCreateInput, UserUncheckedCreateInput> & UserUncheckedCreateInput) | (Without<...> & UserCreateInput)'.
+  Type '{ name: string; email: string; passportId: string; hashedPassword: string; }' is not assignable to type 'Without<UserUncheckedCreateInput, UserCreateInput> & UserCreateInput'.
+    Property 'hashedRefreshToken' is missing in type '{ name: string; email: string; passportId: string; hashedPassword: string; }' but required in type 'UserCreateInput'.
+src/user/user.service.ts(39,52): error TS2345: Argument of type 'null' is not assignable to parameter of type 'string'.
+src/user/user.service.ts(52,17): error TS2339: Property 'generateAndSaveTokens' does not exist on type 'userService'.

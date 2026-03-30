@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator nestjsDto {
+  provider            = "prisma-generator-nestjs-dto"
+  output              = "../src/Esim/Dto"
+  classValidation     = "true"
+  modelNamingStrategy = "pascal"
+  dtoSuffix           = "Dto"
+  createDtoPrefix     = "Create"
+  updateDtoPrefix     = "Update"
+  deleteDtoPrefix     = "Delete"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+}
+
+enum Role {
+  CLIENT
+  SALESMAN
+  CUSTOMER
+}
+
+enum EsimStatus {
+  NOT_ACTIVE
+  ACTIVE
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  FAILED
+  SUCCEEDED
+}
+
+enum TransactionChannel {
+  B2C
+  B2B2C
+}
+
+enum WalletStatus {
+  RESERVED
+  COMMITTED
+  RELEASED
+}
+
+enum EsimEventStatus {
+  ACTIVATION_REQUESTED
+  PROVIDER_PROCESSING
+  PROVIDER_TIMEOUT
+  PROVISIONING_STARTED
+  PROVISIONING_SUCCESS
+  PROVISIONING_FAILED
+  RETRY_ATTEMPT
+  ACTIVATION_SUCCESS
+  ACTIVATION_FAILED
+  TIMEOUT
+  NO_RESPONSE
+  PURCHASE_REQUESTED
+  PAYMENT_PROCESSING
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  WALLET_FAILED
+}
+
+model User {
+  id                 Int        @id @default(autoincrement())
+  passportId         String     @unique
+  firstname          String
+  lastname           String
+  email              String     @unique
+  hashedPassword     String
+  hashedRefreshToken String?
+  status             UserStatus @default(OFFLINE)
+  role               Role       @default(CLIENT)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  transactions       Transaction[]
+  payments           Payment[]
+  walletTransactions WalletTransaction[]
+  esims              Esim[]
+  segment            Segment[]
+}
+
+model Offer {
+  id             Int    @id @default(autoincrement())
+  country        String
+  dataVolume     Int
+  validityDays   Int
+  price          Int
+  InternalMargin Int
+  providerId     Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id       Int                @id @default(autoincrement())
+  status   TransactionStatus
+  channel  TransactionChannel
+  amount   Int
+  currency String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  offerId Int
+  offer   Offer @relation(fields: [offerId], references: [id])
+
+  esim Esim[]
+
+  payment Payment?
+
+  walletTransaction WalletTransaction?
+  EsimAuditLog      EsimAuditLog[]
+}
+
+model Esim {
+  id             Int             @id @default(autoincrement())
+  iccid          String          @unique
+  activationCode String
+  status         EsimStatus
+  event          EsimEventStatus
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  activatedAt DateTime?
+  expiryDate  DateTime
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  transactionId Int
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  providerId Int
+  provider   Provider @relation(fields: [providerId], references: [id])
+
+  usages Usage[]
+}
+
+model Usage {
+  id            Int      @id @default(autoincrement())
+  remainingData Int
+  recordedAt    DateTime @default(now())
+
+  esimId Int
+  esim   Esim @relation(fields: [esimId], references: [id])
+}
+
+model Payment {
+  id              Int    @id @default(autoincrement())
+  paymentProvider String
+  providerRefId   String
+  amount          Int
+  status          String
+  rawResponse     Json?
+
+  createdAt DateTime @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  transactionId Int         @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+}
+
+model Provider {
+  id     Int    @id @default(autoincrement())
+  name   String
+  apiUrl String
+  apiKey String
+
+  createdAt DateTime @default(now())
+
+  esims Esim[]
+  offer Offer[]
+}
+
+model WalletTransaction {
+  id            Int          @id @default(autoincrement())
+  amount        Int
+  paymentMethod String
+  status        WalletStatus
+
+  createdAt DateTime @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  transactionId Int?         @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+}
+
+model EsimAuditLog {
+  id        String          @id @default(cuid())
+  userId    Int
+  jobId     String?
+  event     EsimEventStatus // e.g. "PURCHASE_SUCCESS", "PROVIDER_FAILED"
+  status    EsimStatus // snapshot of status at that moment
+  message   String?
+  details   Json?
+  createdAt DateTime        @default(now())
+
+  transactionId Int
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+}
+
+model Segment {
+  id          Int    @id
+  name        String
+  description String
+
+  userId Int
+  User   User @relation(fields: [userId], references: [id])
+}
