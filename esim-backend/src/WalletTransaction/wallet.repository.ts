@@ -49,8 +49,10 @@ export class WalletRepository {
     // ── COMMIT ─────────────────────────────────────────────────────────────────
     async commitReservedFunds(transactionId: number) {
         return this.prisma.$transaction(async (tx) => {
-            const walletTx = await tx.walletTransaction.findUnique({ where: { transactionId } });
-            if (!walletTx) throw new NotFoundException('WalletTransaction not found');
+            const walletTx = await tx.walletTransaction.findUnique(
+                { where: { transactionId } });
+            if (!walletTx) 
+                throw new NotFoundException('WalletTransaction not found');
             if (walletTx.status !== 'RESERVED') {
                 throw new BadRequestException(`Cannot commit — current status: ${walletTx.status}`);
             }
@@ -192,7 +194,8 @@ export class WalletRepository {
 
             const updatedTopUp = await tx.topUpRequest.update({
                 where: { id: topUpId },
-                data: { status: 'APPROVED', reviewedBy: adminId },
+                data: { status: 'APPROVED', 
+                        reviewedBy: adminId },
             });
 
             const updatedUser = await tx.user.update({
@@ -209,7 +212,6 @@ export class WalletRepository {
                     balanceAfter: updatedUser.balance,
                 },
             });
-
             // ✅ ledger entry for TOP_UP
             await tx.walletLedger.create({
                 data: {
