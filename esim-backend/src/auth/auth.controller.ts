@@ -48,7 +48,7 @@ export class AuthController {
     await this.authService.logout((req.user as any).id);
     return { message: 'Logged out successfully' };
   }
-
+  @UseGuards(JwtAuthGuard)
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const dto: refreshDto = {
@@ -65,7 +65,7 @@ export class AuthController {
 
     return {
       access_token: tokens.access_token,
-      refresf_token: tokens.refresh_token
+      refresh_token: tokens.refresh_token
     };
   }
 }

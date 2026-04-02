@@ -1,13 +1,16 @@
-// purchase-handling.service.ts
-import { Injectable } from '@nestjs/common';
+// purchase.service.ts
+// Responsibility: Validate preconditions → call Provider.createEsim → persist eSIM record atomically
+import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
 import { TransactionRepository } from '../transaction/transaction.repository';
 import { EsimAuditLogService } from 'src/ProvisionningEvent/EsimAuditLog.service';
 import { RetryableError, TerminalError } from './errors';
 import { PurchaseJobData } from 'src/Queue/Interfaces/Queue.interfaces';
-import { EsimEventStatus, EsimStatus } from '@prisma/client';
+import { EsimEventStatus, EsimStatus, LedgerType, LedgerReason } from '@prisma/client';
 import { Job } from 'bullmq';
-import { MockProviderAdapter } from 'src/esim/adapters/mock-provider.adapter';
+import { ProviderAdapter } from 'src/esim/interfaces/provider-adapter.interface';
+import { PROVIDER_ADAPTER } from 'src/esim/adapters/provider-adapter.token';
+import { WalletService } from '../WalletTransaction/wallet.service';
 
 @Injectable()
 export class PurchaseService {
@@ -15,90 +18,165 @@ export class PurchaseService {
         private readonly prisma: PrismaService,
         private readonly transactionRepo: TransactionRepository,
         private readonly esimAuditLogService: EsimAuditLogService,
-        private readonly ProviderAdapter: MockProviderAdapter
+        @Inject(PROVIDER_ADAPTER) private readonly providerAdapter: ProviderAdapter,
+        private readonly walletService: WalletService
     ) { }
 
     async handlePurchase(job: Job<PurchaseJobData>) {
-        const { transactionId, userId, channel } = job.data;
+        const { transactionId, userId, channel, offerId } = job.data;
 
-        // ✅ check transaction — retryable if DB down, terminal if not found
+        // ──────────────────────────────────────────────────────────────
+        // 1. PRECONDITION CHECKS
+        // ──────────────────────────────────────────────────────────────
+
+        // Fetch transaction with offer in one query
         let tx: any;
         try {
             tx = await this.prisma.transaction.findUnique({
                 where: { id: transactionId },
+                include: { offer: true },
             });
         } catch (err: any) {
             throw new RetryableError(`DB error fetching transaction: ${err.message}`);
         }
+        if (!tx)
+            throw new TerminalError('Transaction not found');
+        if (!tx.offer)
+            throw new TerminalError('Offer not found on transaction');
 
-        if (!tx) throw new TerminalError('Transaction not found');
-
-        // ✅ check payment status in DB — retryable if DB down
-        let payment: any;
-        try {
-            payment = await this.prisma.payment.findUnique({
-                where: { transactionId },
-            });
-        } catch (err: any) {
-            throw new RetryableError(`DB error fetching payment: ${err.message}`);
+        // For B2C: verify payment was recorded
+        if (channel === 'B2C') {
+            let payment: any;
+            try {
+                payment = await this.prisma.payment.findUnique({ where: { transactionId } });
+            } catch (err: any) {
+                throw new RetryableError(`DB error fetching payment: ${err.message}`);
+            }
+            if (!payment) throw new TerminalError('Payment record not found');
         }
 
-        if (!payment) throw new TerminalError('Payment not found');
-
-        // ✅ for B2B2C — check wallet balance in DB
+        // For B2B2C: idempotency guard on wallet status
         if (channel === 'B2B2C') {
             let wallet: any;
             try {
-                wallet = await this.prisma.walletTransaction.findUnique({
-                    where: { transactionId },
-                });
+                wallet = await this.prisma.walletTransaction.findUnique
+                    ({ where: { transactionId } });
             } catch (err: any) {
                 throw new RetryableError(`DB error fetching wallet: ${err.message}`);
             }
 
             if (!wallet) throw new TerminalError('Wallet transaction not found');
 
-            // ✅ terminal — retrying won't add funds
-            if (wallet.status === 'RELEASED') {
-                throw new TerminalError('Wallet transaction already released');
+            // RELEASED = funds already refunded (previous failure), COMMITTED = already succeeded
+            // Both mean: do not re-process
+            if (wallet.status === 'RELEASED' || wallet.status === 'COMMITTED') {
+                throw new TerminalError(`Cannot proceed — wallet already ${wallet.status}`);
             }
         }
-        let providerStatus: any;
-        try {
-            providerStatus = await this.ProviderAdapter.getStatus(transactionId);
-        } catch (err: any) {
-            throw new RetryableError(`Provider unreachable: ${err.message}`);
-        }
-        if (providerStatus.status === 'PENDING') {
-            // ✅ provider still processing — retry later
-            throw new RetryableError(`Provider still processing transaction ${transactionId}`);
-        }
-        if (providerStatus.status === 'FAILED') {
-            // ✅ provider permanently failed — no point retrying
-            await this.transactionRepo.updateStatus(transactionId, 'FAILED');
-            await this.esimAuditLogService.log({
-                transactionId,
-                userId,
-                event: EsimEventStatus.PROVISIONING_FAILED,
-                status: EsimStatus.NOT_ACTIVE,
-                message: `Provider rejected transaction: ${providerStatus.message}`,
-            });
-            throw new TerminalError(`Provider failed: ${providerStatus.message}`);
-        }
 
-        // ✅ update transaction to PROCESSING — retryable if DB down
-        try {
-            await this.transactionRepo.updateStatus(transactionId, 'PROCESSING');
-        } catch (err: any) {
-            throw new RetryableError(`DB error updating transaction status: ${err.message}`);
-        }
+        // ──────────────────────────────────────────────────────────────
+        // 2. CALL PROVIDER TO CREATE ESIM
+        // ──────────────────────────────────────────────────────────────
 
         await this.esimAuditLogService.log({
             transactionId,
             userId,
             event: EsimEventStatus.PROVISIONING_STARTED,
             status: EsimStatus.NOT_ACTIVE,
-            message: `Purchase handling started via ${channel}`,
+            message: `eSIM creation requested via ${channel}`,
+        });
+
+        let esimData: { iccid: string; activationCode: string; expiryDate: Date };
+        try {
+            esimData = await this.providerAdapter.createEsim({
+                transactionId,
+                offerId,
+                country: tx.offer.country,
+                dataVolume: tx.offer.dataVolume,
+                validityDays: tx.offer.validityDays,
+                providerId: tx.offer.providerId,
+                userId,
+            });
+        } catch (err: any) {
+            // Infrastructure error (5xx, timeout, network reset) → BullMQ will retry
+            if (isInfraError(err)) {
+                throw new RetryableError(`Provider infrastructure error: ${err.message}`);
+            }
+
+            // Business error (4xx, out of stock, invalid plan) → release funds if B2B2C, then fail
+            if (channel === 'B2B2C') {
+                const releasedWallet = await this.walletService.releaseReservedFunds(transactionId);
+                await this.walletService.logLedger(
+                    releasedWallet.id,
+                    tx.offer.price, // assuming tx.offer.price is the wallet amount reserved
+                    LedgerType.CREDIT,
+                    LedgerReason.RELEASE,
+                    transactionId
+                );
+            }
+            await this.transactionRepo.updateStatus(transactionId, 'FAILED');
+            await this.esimAuditLogService.log({
+                transactionId,
+                userId,
+                event: EsimEventStatus.PROVISIONING_FAILED,
+                status: EsimStatus.NOT_ACTIVE,
+                message: `Provider rejected eSIM creation: ${err.message}`,
+            });
+            throw new TerminalError(`Provider business error: ${err.message}`);
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // 3. PERSIST ESIM RECORD ATOMICALLY & MARK TRANSACTION PROCESSING
+        // ──────────────────────────────────────────────────────────────
+
+        try {
+            await this.prisma.$transaction(async (prismaTx) => {
+                await prismaTx.esim.create({
+                    data: {
+                        iccid: esimData.iccid,
+                        activationCode: esimData.activationCode,
+                        expiryDate: esimData.expiryDate,
+                        status: EsimStatus.NOT_ACTIVE,
+                        event: EsimEventStatus.PROVISIONING_STARTED,
+                        userId,
+                        providerId: tx.offer.providerId,
+                        transactionId,
+                    },
+                });
+
+                await prismaTx.transaction.update({
+                    where: { id: transactionId },
+                    data: { status: 'PROCESSING' },
+                });
+            });
+        } catch (err: any) {
+            throw new RetryableError(`DB error persisting eSIM record: ${err.message}`);
+        }
+        if (channel === 'B2B2C') {
+            try {
+                const committedWallet = await this.walletService.commitReservedFunds(transactionId);
+                await this.walletService.logLedger(
+                    committedWallet.id,
+                    committedWallet.amount,
+                    LedgerType.DEBIT,
+                    LedgerReason.COMMIT,
+                    transactionId
+                );
+            } catch (err: any) {
+                // ✅ retryable — eSIM already created, just need to commit wallet
+                throw new RetryableError(`DB error committing wallet funds: ${err.message}`);
+            }
+        }
+        await this.esimAuditLogService.log({
+            transactionId,
+            userId,
+            event: EsimEventStatus.PROVIDER_PROCESSING,
+            status: EsimStatus.NOT_ACTIVE,
+            message: `eSIM created (iccid: ${esimData.iccid}), awaiting activation`,
         });
     }
+}
+
+function isInfraError(err: any): boolean {
+    return err?.status >= 500 || err?.code === 'ECONNRESET' || err?.code === 'ETIMEDOUT';
 }

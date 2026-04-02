@@ -6,6 +6,7 @@ import {Payment} from './payment.entity'
 import {WalletTransaction} from './walletTransaction.entity'
 import {Esim} from './esim.entity'
 import {Segment} from './segment.entity'
+import {TopUpRequest} from './topUpRequest.entity'
 
 
 export class User {
@@ -39,6 +40,15 @@ hashedPassword: string ;
   nullable: true,
 })
 hashedRefreshToken: string  | null;
+@ApiProperty({
+  type: 'boolean',
+})
+isDeleted: boolean ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+balance: number ;
 @ApiProperty({
   enum: UserStatus,
   enumName: 'UserStatus',
@@ -89,4 +99,16 @@ esims?: Esim[] ;
   required: false,
 })
 segment?: Segment[] ;
+@ApiProperty({
+  type: () => TopUpRequest,
+  isArray: true,
+  required: false,
+})
+salesmanTopUps?: TopUpRequest[] ;
+@ApiProperty({
+  type: () => TopUpRequest,
+  isArray: true,
+  required: false,
+})
+reviewedTopUps?: TopUpRequest[] ;
 }

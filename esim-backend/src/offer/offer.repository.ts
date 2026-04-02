@@ -14,4 +14,16 @@ export class OfferRepository {
             data: transactionData
         });
     }
+    async update(id: number, updateData: any) {
+        return this.Prisma.offer.update({
+            where: { id },
+            data: updateData,
+        });
+    }
+    async delete(id: number) {
+        return this.Prisma.offer.update({
+            where: { id },
+            data: { isDeleted: true },
+        });
+    }
 }

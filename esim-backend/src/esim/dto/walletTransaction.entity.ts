@@ -3,6 +3,7 @@ import {WalletStatus} from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 import {User} from './user.entity'
 import {Transaction} from './transaction.entity'
+import {WalletLedger} from './walletLedger.entity'
 
 
 export class WalletTransaction {
@@ -25,6 +26,11 @@ paymentMethod: string ;
   enumName: 'WalletStatus',
 })
 status: WalletStatus ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+balanceAfter: number ;
 @ApiProperty({
   type: 'string',
   format: 'date-time',
@@ -52,4 +58,10 @@ transactionId: number  | null;
   nullable: true,
 })
 transaction?: Transaction  | null;
+@ApiProperty({
+  type: () => WalletLedger,
+  isArray: true,
+  required: false,
+})
+ledgerEntries?: WalletLedger[] ;
 }

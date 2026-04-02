@@ -40,6 +40,10 @@ InternalMargin: number ;
 })
 providerId: number ;
 @ApiProperty({
+  type: 'boolean',
+})
+isDeleted: boolean ;
+@ApiProperty({
   type: 'string',
   format: 'date-time',
 })

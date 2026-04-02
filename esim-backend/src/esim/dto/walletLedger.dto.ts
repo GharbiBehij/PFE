@@ -1,9 +1,9 @@
 
-import {WalletStatus} from '@prisma/client'
+import {LedgerReason,LedgerType} from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 
 
-export class WalletTransactionDto {
+export class WalletLedgerDto {
   @ApiProperty({
   type: 'integer',
   format: 'int32',
@@ -15,19 +15,21 @@ id: number ;
 })
 amount: number ;
 @ApiProperty({
-  type: 'string',
+  enum: LedgerType,
+  enumName: 'LedgerType',
 })
-paymentMethod: string ;
+type: LedgerType ;
 @ApiProperty({
-  enum: WalletStatus,
-  enumName: 'WalletStatus',
+  enum: LedgerReason,
+  enumName: 'LedgerReason',
 })
-status: WalletStatus ;
+reason: LedgerReason ;
 @ApiProperty({
   type: 'integer',
   format: 'int32',
+  nullable: true,
 })
-balanceAfter: number ;
+referenceId: number  | null;
 @ApiProperty({
   type: 'string',
   format: 'date-time',

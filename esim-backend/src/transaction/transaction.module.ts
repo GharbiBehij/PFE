@@ -10,6 +10,6 @@ import { EsimModule } from '../esim/esim.module';
   imports: [OfferModule, forwardRef(() => EsimModule)],
   controllers: [TransactionController],
   providers: [TransactionService, TransactionRepository, PrismaService],
-  exports: [TransactionService],
+  exports: [TransactionService, TransactionRepository],
 })
 export class TransactionModule {}

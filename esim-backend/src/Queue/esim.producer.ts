@@ -25,8 +25,8 @@ export class EsimProducer {
                 type: 'exponential',
                 delay: 3000,
             },
-            removeOnComplete: true,
-            removeOnFail: false,
+            removeOnComplete: true, //when job gets completed remove it from the queue
+            removeOnFail: false,// when job fails dont fail over 
         });
     }
 }

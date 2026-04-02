@@ -3,9 +3,9 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { ESIM_QUEUE, JOB_ACTIVATE_ESIM, JOB_PURCHASE_ESIM } from '../Queue/esim.queue';
 import { ActivationService } from '../workers/activation.service';
-import { PurchaseService } from '../workers/purchase.service'
+import { PurchaseService } from '../workers/Purchase.service'
 import { PrismaService } from 'prisma/prisma.service';
-import { EsimEventStatus, EsimStatus } from '@prisma/client';
+import { EsimEventStatus, EsimStatus, WalletStatus } from '@prisma/client';
 import { EsimAuditLogService } from 'src/ProvisionningEvent/EsimAuditLog.service';
 
 @Processor(ESIM_QUEUE, { concurrency: 10 })
@@ -52,6 +52,12 @@ export class EsimProcessor extends WorkerHost {
                 status: EsimStatus.ACTIVE,
             },
         });
+        await this.prisma.walletTransaction.update({
+            where: { transactionId },
+            data: {
+                status: WalletStatus.COMMITTED
+            }
+        })
     }
     @OnWorkerEvent('failed')
     async onFailed(job: Job, err: Error) {
@@ -84,6 +90,12 @@ export class EsimProcessor extends WorkerHost {
                 where: { id: transactionId },
                 data: { status: 'FAILED' },
             });
+            await this.prisma.walletTransaction.update({
+                where: { transactionId },
+                data: {
+                    status: WalletStatus.RELEASED
+                }
+            })
         }
     }
 }

@@ -73,7 +73,7 @@ export class PaymentService {
 
     // Failure AND NOT retryable
     await this.paymentRepository.updatePaymentStatus(transactionId, 'FAILED', paymentResult as any);
-    await this.transactionService.markFailed(transactionId, TransactionStatus);
+    await this.transactionService.markFailed(transactionId);
     await this.EsimAuditLogService.log('PAYMENT_FAILED' as any);
 
     return { status: 'FAILED' };

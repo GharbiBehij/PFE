@@ -9,6 +9,12 @@ export class OfferService {
   create(dto: CreateOfferDto) {
     return this.OfferRepository.create(dto);
   }
+  update(id: number, dto: UpdateOfferDto) {
+    return this.OfferRepository.update(id, dto)
+  }
+  delete(id: number) {
+    return this.OfferRepository.update(id, { isDeleted: true })
+  }
 
   findbyId(id: number) {
     return this.OfferRepository.findbyId(id)

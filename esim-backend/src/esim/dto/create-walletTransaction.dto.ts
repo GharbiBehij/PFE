@@ -27,4 +27,11 @@ paymentMethod: string ;
 @IsNotEmpty()
 @IsEnum(WalletStatus)
 status: WalletStatus ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+@IsNotEmpty()
+@IsInt()
+balanceAfter: number ;
 }

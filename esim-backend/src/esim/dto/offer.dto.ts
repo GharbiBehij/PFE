@@ -33,6 +33,10 @@ price: number ;
 })
 InternalMargin: number ;
 @ApiProperty({
+  type: 'boolean',
+})
+isDeleted: boolean ;
+@ApiProperty({
   type: 'string',
   format: 'date-time',
 })

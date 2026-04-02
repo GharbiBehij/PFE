@@ -24,7 +24,6 @@ export class EsimRepository {
             await tx.transaction.update({
                 where: { id: transactionId },
                 data: {
-                    esimId: esim.id,
                     status: TransactionStatus.PROCESSING // Using proper Enum
                 },
             });

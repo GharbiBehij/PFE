@@ -4,7 +4,7 @@ import { TransactionService } from 'src/transaction/transaction.service';
 import { EsimProducer } from 'src/Queue/esim.producer';
 import { userService } from 'src/user/user.service';
 import { WalletService } from '../WalletTransaction/wallet.service';
-import { EsimEventStatus, EsimStatus, Role } from '@prisma/client';
+import { EsimEventStatus, EsimStatus, Role,LedgerType,LedgerReason } from '@prisma/client';
 import { EsimAuditLogService } from 'src/ProvisionningEvent/EsimAuditLog.service';
 import { PaymentService } from '../payment/payment.service'
 import { randomBytes } from 'crypto';
@@ -40,7 +40,7 @@ export class EsimPurchaseOrchestrator {
         });
 
         if (dto.channel === 'B2C') {
-            return this.processB2C(dto, client.id, transaction.id, client);
+            return this.processB2C(dto, client.id, transaction.id);
         }
 
         if (dto.channel === 'B2B2C') {
@@ -68,7 +68,6 @@ export class EsimPurchaseOrchestrator {
         dto: CreateTransactionDto,
         userId: number,
         transactionId: number,
-        user: any,
     ) {
         const paymentResponse = await this.paymentService.initiatePayment(dto, transactionId);
 
@@ -84,10 +83,12 @@ export class EsimPurchaseOrchestrator {
             return { transactionId, message: 'PAYMENT_FAILED', error: paymentResponse.error };
         }
 
+        
+
         try {
             await this.esimProducer.enqueuePurchase({
                 transactionId,
-                userId: user.id,
+                userId: userId,
                 channel: dto.channel,
                 offerId: dto.offerId,
                 amount: dto.amount,
@@ -100,7 +101,7 @@ export class EsimPurchaseOrchestrator {
                 userId,
                 event: EsimEventStatus.PROVISIONING_FAILED,
                 status: EsimStatus.NOT_ACTIVE,
-                message: `Failed to enqueue job: ${error.message}`,
+                message: `Failed to enqueue job: ${error instanceof Error ? error.message : String(error)}`,
             });
             return { transactionId, message: 'QUEUE_FAILED' };
         }
@@ -114,25 +115,31 @@ export class EsimPurchaseOrchestrator {
         salesmanId: number,
         transactionId: number,
     ) {
-        // ✅ deduct from salesman wallet not client
-        const wallet = await this.walletService.deduct(salesmanId, dto.amount);
-
-        if (!wallet.success) {
+        // ✅ deduct from salesman wallet → status: RESERVED
+        let wallet: any;
+        try {
+            wallet = await this.walletService.ReserveAmount(
+                salesmanId,
+                transactionId,
+                dto.amount,
+                dto.paymentMethod ?? 'WALLET',
+            );
+        } catch (error) {
             await this.transactionService.markFailed(transactionId);
             await this.esimAuditLogService.log({
                 transactionId,
                 userId: clientId,
-                event: EsimEventStatus.PAYMENT_FAILED,
+                event: EsimEventStatus.WALLET_FAILED,
                 status: EsimStatus.NOT_ACTIVE,
-                message: wallet.error,
+                message: error instanceof Error ? error.message : String(error),
             });
-            return { transactionId, message: 'WALLET_FAILED', error: wallet.error };
+            return { transactionId, message: 'WALLET_FAILED', error: error instanceof Error ? error.message : String(error) };
         }
 
         try {
             await this.esimProducer.enqueuePurchase({
                 transactionId,
-                userId: clientId,   // ✅ esim linked to client
+                userId: clientId,
                 channel: dto.channel,
                 offerId: dto.offerId,
                 amount: dto.amount,
@@ -140,15 +147,15 @@ export class EsimPurchaseOrchestrator {
                 paymentMethod: dto.paymentMethod,
             });
         } catch (error) {
-            // ✅ rollback salesman wallet if enqueue fails
-            await this.walletService.refund(salesmanId, dto.amount);
+            // ✅ enqueue failed — release RESERVED funds back to salesman
+            await this.walletService.releaseReservedFunds(transactionId);
             await this.transactionService.markFailed(transactionId);
             await this.esimAuditLogService.log({
                 transactionId,
                 userId: clientId,
                 event: EsimEventStatus.PROVISIONING_FAILED,
                 status: EsimStatus.NOT_ACTIVE,
-                message: `Failed to enqueue job: ${error.message}`,
+                message: `Failed to enqueue job: ${error instanceof Error ? error.message : String(error)}`,
             });
             return { transactionId, message: 'QUEUE_FAILED' };
         }

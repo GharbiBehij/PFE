@@ -1,5 +1,9 @@
-// create-esim.dto.ts
 export interface CreateEsimDto {
-  offerId: number;
   transactionId: number;
+  offerId: number;
+  country: string;
+  dataVolume: number;    // MB
+  validityDays: number;
+  providerId: number;
+  userId: number;
 }

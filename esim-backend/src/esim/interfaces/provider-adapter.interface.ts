@@ -1,4 +1,3 @@
-// provider-adapter.interface.ts
 import { CreateEsimDto } from '../adapters/create-esim.dto';
 
 export interface CreateEsimResponse {
@@ -14,5 +13,7 @@ export interface ProviderStatusResponse {
 
 export interface ProviderAdapter {
   createEsim(dto: CreateEsimDto): Promise<CreateEsimResponse>;
-  getStatus(transactionId: number): Promise<ProviderStatusResponse>; // ✅ added
+  getStatus(iccid: string): Promise<ProviderStatusResponse>;
+  cancelEsim(iccid: string): Promise<void>;
+  deactivateEsim(iccid: string): Promise<void>;
 }

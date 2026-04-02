@@ -10,6 +10,7 @@ import { TransactionModule } from 'src/transaction/transaction.module';
 import { OfferModule } from 'src/offer/offer.module';
 import { PaymentModule } from 'src/payment/payment.module';
 import { ProvisioningModule } from 'src/ProvisionningEvent/EsimAuditLog.module';
+import { EsimQueueModule } from 'src/Queue/esim-queue.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 @Module({
@@ -37,6 +38,7 @@ import { BullModule } from '@nestjs/bullmq';
     OfferModule,
     PaymentModule,
     ProvisioningModule,
+    EsimQueueModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),

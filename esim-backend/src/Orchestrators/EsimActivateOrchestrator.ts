@@ -53,8 +53,9 @@ export class EsimActivationOrchestrator {
         return {
             transactionId: transaction.id,
             esimId: esim.id,
-            message: 'ACTIVATION_IN_PROGRESS',
-            status: 'PROCESSING',
+            message: 'ACTIVATION_SUCCEDED',
+            status: 'SUCCEDED',
         };
+       
     }
 }

@@ -30,4 +30,12 @@ paymentMethod?: string ;
 @IsOptional()
 @IsEnum(WalletStatus)
 status?: WalletStatus ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+  required: false,
+})
+@IsOptional()
+@IsInt()
+balanceAfter?: number ;
 }
