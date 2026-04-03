@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ANDROID_HOME=\"C:/Users/Lenovo/AppData/Local/Android/Sdk\" C:/Users/Lenovo/Downloads/flutter/flutter/bin/flutter.bat doctor:*)"
+    ]
+  }
+}
