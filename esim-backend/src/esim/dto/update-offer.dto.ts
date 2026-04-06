@@ -14,6 +14,48 @@ export class UpdateOfferDto {
 @IsString()
 country?: string ;
 @ApiProperty({
+  type: 'string',
+  required: false,
+})
+@IsOptional()
+@IsString()
+Region?: string ;
+@ApiProperty({
+  type: 'string',
+  required: false,
+})
+@IsOptional()
+@IsString()
+Destination?: string ;
+@ApiProperty({
+  type: 'string',
+  required: false,
+})
+@IsOptional()
+@IsString()
+Category?: string ;
+@ApiProperty({
+  type: 'string',
+  required: false,
+})
+@IsOptional()
+@IsString()
+title?: string ;
+@ApiProperty({
+  type: 'string',
+  required: false,
+})
+@IsOptional()
+@IsString()
+description?: string ;
+@ApiProperty({
+  type: 'string',
+  required: false,
+})
+@IsOptional()
+@IsString()
+popularity?: string ;
+@ApiProperty({
   type: 'integer',
   format: 'int32',
   required: false,

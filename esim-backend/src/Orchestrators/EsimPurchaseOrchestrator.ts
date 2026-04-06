@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { CreateTransactionDto } from 'src/transaction/dto/create-transaction.dto';
 import { TransactionService } from 'src/transaction/transaction.service';
 import { EsimProducer } from 'src/Queue/esim.producer';
@@ -13,6 +13,7 @@ import { randomBytes } from 'crypto';
 export class EsimPurchaseOrchestrator {
     constructor(
         private readonly transactionService: TransactionService,
+        @Inject(forwardRef(() => userService))
         private readonly userService: userService,
         private readonly esimProducer: EsimProducer,
         private readonly paymentService: PaymentService,
@@ -59,7 +60,7 @@ export class EsimPurchaseOrchestrator {
             email: dto.email,
             firstname: dto.firstname,
             lastname: dto.lastname,
-            Password: randomBytes(8).toString('hex'),
+            password: randomBytes(8).toString('hex'),
             role: Role.CUSTOMER,
         });
     }

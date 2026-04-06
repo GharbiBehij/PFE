@@ -19,6 +19,20 @@ export class OfferService {
   findbyId(id: number) {
     return this.OfferRepository.findbyId(id)
   }
-
-
+  findAll() {
+    return this.OfferRepository.findAll()
+  }
+  findByCountry(country: string) {
+    return this.OfferRepository.findByCountry(country)
+  }
+  findPopular() {
+    return this.OfferRepository.findPopular()
+  }
+  search(query: string) {
+    return this.OfferRepository.search(query)
+  }
+  findDestinations() {
+    return this.OfferRepository.findDestinations()
+  }
+     
 }

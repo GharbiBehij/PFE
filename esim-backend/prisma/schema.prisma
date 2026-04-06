@@ -91,7 +91,7 @@ enum EsimEventStatus {
 
 model User {
   id                 Int        @id @default(autoincrement())
-  passportId         String     @unique
+  passportId         String?    @unique
   firstname          String
   lastname           String
   email              String     @unique
@@ -117,6 +117,12 @@ model User {
 model Offer {
   id             Int    @id @default(autoincrement())
   country        String
+  Region         String
+  Destination    String
+  Category       String 
+  title          String
+  description    String
+  popularity     String
   dataVolume     Int
   validityDays   Int
   price          Int

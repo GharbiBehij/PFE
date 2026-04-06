@@ -13,6 +13,30 @@ id: number ;
 })
 country: string ;
 @ApiProperty({
+  type: 'string',
+})
+Region: string ;
+@ApiProperty({
+  type: 'string',
+})
+Destination: string ;
+@ApiProperty({
+  type: 'string',
+})
+Category: string ;
+@ApiProperty({
+  type: 'string',
+})
+title: string ;
+@ApiProperty({
+  type: 'string',
+})
+description: string ;
+@ApiProperty({
+  type: 'string',
+})
+popularity: string ;
+@ApiProperty({
   type: 'integer',
   format: 'int32',
 })

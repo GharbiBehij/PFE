@@ -1,5 +1,5 @@
 
-import {Prisma,ProvisioningEventType} from '@prisma/client'
+import { Prisma, EsimEventStatus } from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 import {IsEnum,IsNotEmpty,IsOptional} from 'class-validator'
 
@@ -8,12 +8,12 @@ import {IsEnum,IsNotEmpty,IsOptional} from 'class-validator'
 
 export class CreateProvisioningEventDto {
   @ApiProperty({
-  enum: ProvisioningEventType,
-  enumName: 'ProvisioningEventType',
+  enum: EsimEventStatus,
+  enumName: 'EsimEventStatus',
 })
 @IsNotEmpty()
-@IsEnum(ProvisioningEventType)
-type: ProvisioningEventType ;
+@IsEnum(EsimEventStatus)
+type: EsimEventStatus ;
 @ApiProperty({
   type: () => Object,
   required: false,

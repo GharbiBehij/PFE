@@ -8,10 +8,12 @@ import {IsNotEmpty,IsOptional,IsString} from 'class-validator'
 export class CreateUserDto {
   @ApiProperty({
   type: 'string',
+  required: false,
+  nullable: true,
 })
-@IsNotEmpty()
+@IsOptional()
 @IsString()
-passportId: string ;
+passportId?: string  | null;
 @ApiProperty({
   type: 'string',
 })

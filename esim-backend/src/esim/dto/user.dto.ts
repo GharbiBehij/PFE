@@ -11,8 +11,9 @@ export class UserDto {
 id: number ;
 @ApiProperty({
   type: 'string',
+  nullable: true,
 })
-passportId: string ;
+passportId: string  | null;
 @ApiProperty({
   type: 'string',
 })

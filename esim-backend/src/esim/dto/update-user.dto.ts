@@ -9,10 +9,11 @@ export class UpdateUserDto {
   @ApiProperty({
   type: 'string',
   required: false,
+  nullable: true,
 })
 @IsOptional()
 @IsString()
-passportId?: string ;
+passportId?: string  | null;
 @ApiProperty({
   type: 'string',
   required: false,

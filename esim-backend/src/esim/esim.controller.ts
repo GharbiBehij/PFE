@@ -8,8 +8,8 @@ export class EsimController {
   constructor(private readonly esimService: EsimService) { }
 
   @Post()
-  create(@Body() createEsimDto: CreateEsimDto, userId: number, salesmanId: number, transactionId: number, providerId: number) {
-    return this.esimService.create(createEsimDto, userId, salesmanId, transactionId, providerId);
+  create(@Body() createEsimDto: CreateEsimDto, userId: number, salesmanId: number, transactionId: number) {
+    return this.esimService.create(createEsimDto, userId, salesmanId, transactionId,);
   }
 
   @Get()

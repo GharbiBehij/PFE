@@ -4,6 +4,8 @@ export interface CreateOfferDto {
     dataVolume: number;
     validityDays: number;
     price: number;
+    title: string;
+    description: string;
     InternalMargin: number
     providerId: number
 }

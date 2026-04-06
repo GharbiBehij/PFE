@@ -1,5 +1,5 @@
 
-import {Prisma,ProvisioningEventType} from '@prisma/client'
+import { Prisma, EsimEventStatus } from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 import {Transaction} from './transaction.entity'
 
@@ -11,10 +11,10 @@ export class ProvisioningEvent {
 })
 id: number ;
 @ApiProperty({
-  enum: ProvisioningEventType,
-  enumName: 'ProvisioningEventType',
+  enum: EsimEventStatus,
+  enumName: 'EsimEventStatus',
 })
-type: ProvisioningEventType ;
+type: EsimEventStatus ;
 @ApiProperty({
   type: () => Object,
   nullable: true,
