@@ -59,9 +59,6 @@ export class OfferRepository {
                     { description: { contains: query, mode: 'insensitive' } },
                 ],
                 isDeleted: false,
-                skip: 0, 
-                
-                take: 20
             },
         });
     }
