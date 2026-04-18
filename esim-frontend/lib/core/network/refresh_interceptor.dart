@@ -28,8 +28,8 @@ class RefreshInterceptor extends Interceptor {
         options: Options(extra: {'skipRefresh': true}),
       );
 
-      final newAccess = res.data!['accessToken'] as String;
-      final newRefresh = res.data!['refreshToken'] as String? ?? refreshToken;
+      final newAccess = res.data!['access_token'] as String;
+      final newRefresh = res.data!['refresh_token'] as String? ?? refreshToken;
       await _storage.saveTokens(
         accessToken: newAccess,
         refreshToken: newRefresh,

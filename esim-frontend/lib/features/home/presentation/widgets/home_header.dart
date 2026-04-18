@@ -1,115 +1,166 @@
 import 'package:flutter/material.dart';
+
 import 'package:go_router/go_router.dart';
 
+import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
 import 'package:esim_frontend/core/router/route_names.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
 
 class HomeHeader extends StatelessWidget {
-  const HomeHeader({required this.userName, super.key});
+  const HomeHeader({
+    required this.isLoggedIn,
+    required this.onSearchTap,
+    super.key,
+  });
 
-  final String userName;
+  final bool isLoggedIn;
+  final VoidCallback onSearchTap;
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.of(context).padding.top;
+    final safeTop = MediaQuery.of(context).padding.top;
+
     return Container(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        safeTop + AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xl,
+      ),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryDark],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
+            color: AppColors.primary.withValues(alpha: 0.30),
+            blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      padding: EdgeInsets.fromLTRB(16, top + 16, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Bon retour,',
-                      style: TextStyle(
-                        color: Color(0xFF6B7280),
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      userName.isEmpty ? 'Utilisateur' : userName,
-                      style: const TextStyle(
-                        color: Color(0xFF1F2937),
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Stack(
-                clipBehavior: Clip.none,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF3F4F6),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      padding: const EdgeInsets.all(8),
-                      icon: const Icon(
-                        Icons.notifications_outlined,
-                        color: AppColors.textPrimary,
-                        size: 20,
-                      ),
-                      onPressed: () {},
+                  Text(
+                    'Bienvenue',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: AppColors.error,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Ou allez-vous?',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
                     ),
                   ),
                 ],
               ),
+              if (isLoggedIn)
+                MotionPressable(
+                  onTap: () => context.push(RouteNames.profile),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.secondary.withValues(alpha: 0.32),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.person,
+                      color: AppColors.textDark,
+                      size: 20,
+                    ),
+                  ),
+                )
+              else
+                MotionPressable(
+                  onTap: () => context.push(RouteNames.login),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Text(
+                      'Connexion',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: () => context.push(RouteNames.search),
+          const SizedBox(height: AppSpacing.xl),
+          MotionPressable(
+            onTap: onSearchTap,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white.withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 20,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.search, color: Color(0xFF9CA3AF), size: 18),
-                  SizedBox(width: 8),
+                  Icon(
+                    Icons.search,
+                    color: AppColors.textSecondary,
+                    size: 22,
+                  ),
+                  SizedBox(width: 12),
                   Text(
-                    'Chercher une destination...',
+                    'Rechercher une destination...',
                     style: TextStyle(
-                      color: Color(0xFF9CA3AF),
-                      fontSize: 15,
+                      color: AppColors.textSecondary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

@@ -1,7 +1,9 @@
 
+import {CoverageType} from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 import {Provider} from './provider.entity'
 import {Transaction} from './transaction.entity'
+import {Esim} from './esim.entity'
 
 
 export class Offer {
@@ -38,6 +40,11 @@ description: string ;
   type: 'string',
 })
 popularity: string ;
+@ApiProperty({
+  enum: CoverageType,
+  enumName: 'CoverageType',
+})
+coverageType: CoverageType ;
 @ApiProperty({
   type: 'integer',
   format: 'int32',
@@ -88,4 +95,10 @@ provider?: Provider ;
   required: false,
 })
 transactions?: Transaction[] ;
+@ApiProperty({
+  type: () => Esim,
+  isArray: true,
+  required: false,
+})
+esims?: Esim[] ;
 }

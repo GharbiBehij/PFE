@@ -23,14 +23,23 @@ enum UserStatus {
 }
 
 enum Role {
+  ADMIN
   CLIENT
   SALESMAN
   CUSTOMER
 }
-
+enum CoverageType {
+  LOCAL
+  REGIONAL 
+  GLOBAL
+}
 enum EsimStatus {
   NOT_ACTIVE
   ACTIVE
+  PROCESSING
+  PENDING
+  EXPIRED
+  DELETED
 }
 
 enum TransactionStatus {
@@ -68,6 +77,18 @@ enum TopUpStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum ActivationAttemptStatus {
+  STARTED
+  SUCCESS
+  FAILED
+  TIMED_OUT
+}
+enum OfferCategory {
+  STUDENT
+  STREAMER
+  INFLUENCER
 }
 
 enum EsimEventStatus {
@@ -110,6 +131,8 @@ model User {
   esims              Esim[]
   segment            Segment[]
   
+  phone              String?
+
   salesmanTopUps     TopUpRequest[] @relation("SalesmanTopUps")
   reviewedTopUps     TopUpRequest[] @relation("ReviewerTopUps")
 }
@@ -123,6 +146,7 @@ model Offer {
   title          String
   description    String
   popularity     String
+  coverageType   CoverageType  @default(LOCAL)
   dataVolume     Int
   validityDays   Int
   price          Int
@@ -136,6 +160,7 @@ model Offer {
   provider Provider @relation(fields: [providerId], references: [id])
 
   transactions Transaction[]
+  esims        Esim[]
 }
 
 model Transaction {
@@ -168,6 +193,10 @@ model Esim {
   activationCode String
   status         EsimStatus
   event          EsimEventStatus
+  qrCode         String?
+  dataTotal      Int             @default(0)
+  dataUsed       Int             @default(0)
+  lastUsageSync  DateTime?
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -180,10 +209,17 @@ model Esim {
   transactionId Int
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 
+  offerId  Int?
+  offer    Offer?   @relation(fields: [offerId], references: [id])
+
   providerId Int
   provider   Provider @relation(fields: [providerId], references: [id])
 
-  usages Usage[]
+  usages             Usage[]
+  activationAttempts ActivationAttempt[]
+
+  @@index([userId])
+  @@index([status])
 }
 
 model Usage {
@@ -245,9 +281,9 @@ model WalletTransaction {
 model WalletLedger {
   id          Int          @id @default(autoincrement())
   amount      Int
-  type        LedgerType   // DEBIT | CREDIT
-  reason      LedgerReason // RESERVE | COMMIT | RELEASE | TOP_UP | REFUND
-  referenceId Int?         // transactionId or topUpRequestId
+  type        LedgerType   
+  reason      LedgerReason 
+  referenceId Int?         
 
   createdAt DateTime @default(now())
 
@@ -259,8 +295,8 @@ model EsimAuditLog {
   id        String          @id @default(cuid())
   userId    Int
   jobId     String?
-  event     EsimEventStatus // e.g. "PURCHASE_SUCCESS", "PROVIDER_FAILED"
-  status    EsimStatus // snapshot of status at that moment
+  event     EsimEventStatus 
+  status    EsimStatus 
   message   String?
   details   Json?
   createdAt DateTime        @default(now())
@@ -283,10 +319,29 @@ model TopUpRequest {
   salesmanId  Int
   amount      Float
   status      TopUpStatus  @default(PENDING)
-  reviewedBy  Int?         
+  reviewedBy  Int?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   salesman    User         @relation("SalesmanTopUps", fields: [salesmanId], references: [id])
   reviewer    User?        @relation("ReviewerTopUps", fields: [reviewedBy], references: [id])
+}
+
+model ActivationAttempt {
+  id                String                  @id @default(cuid())
+  attemptNumber     Int
+  status            ActivationAttemptStatus
+  providerRequestId String                  @unique
+  providerResponse  Json?
+  errorCode         String?
+  errorMessage      String?
+  startedAt         DateTime
+  completedAt       DateTime?
+  createdAt         DateTime                @default(now())
+
+  esimId Int
+  esim   Esim @relation(fields: [esimId], references: [id])
+
+  @@index([esimId, status])
+  @@index([esimId, attemptNumber])
 }

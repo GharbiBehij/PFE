@@ -66,7 +66,7 @@ class PurchaseNotifier extends StateNotifier<PurchaseState> {
       );
 
       _ref.invalidate(userTransactionsProvider);
-      if (paymentMethod == 'wallet') {
+      if (paymentMethod.toLowerCase() == 'wallet') {
         _ref.invalidate(walletBalanceProvider);
         _ref.invalidate(walletHistoryProvider);
         _ref.invalidate(authProvider);

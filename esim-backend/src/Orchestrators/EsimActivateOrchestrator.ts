@@ -3,6 +3,7 @@ import { TransactionService } from 'src/transaction/transaction.service';
 import { EsimProducer } from 'src/Queue/esim.producer';
 import { EsimService } from 'src/esim/esim.service';
 import { userService } from 'src/user/user.service';
+import { TransactionStatus } from '@prisma/client';
 
 export interface ActivateEsimDto {
     esimId: number;
@@ -37,11 +38,22 @@ export class EsimActivationOrchestrator {
             throw new NotFoundException(`eSIM #${dto.esimId} not found`);
         }
 
+        if (esim.status === 'ACTIVE') {
+         return {
+           message: 'Already activated',
+           status: 'SUCCESS',
+    };
+}
+        if (esim.status === 'PENDING') {
+         return {
+           message: 'Activation already in progress',
+           status: esim.status,
+    };
+}
         // 4. make sure esim belongs to this transaction
         if (esim.transactionId !== dto.transactionId) {
             throw new BadRequestException(`eSIM #${dto.esimId} does not belong to Transaction #${dto.transactionId}`);
         }
-
         // 5. enqueue activation — worker handles provider call
         await this.esimProducer.enqueueActivation({
             transactionId: transaction.id,
@@ -50,11 +62,13 @@ export class EsimActivationOrchestrator {
             channel: transaction.channel,
         });
 
+        await this.esimService.markProcessing(dto.esimId);
+
         return {
             transactionId: transaction.id,
             esimId: esim.id,
-            message: 'ACTIVATION_SUCCEDED',
-            status: 'SUCCEDED',
+            message: 'Activation in progress. You will be notified once completed.',
+            status: 'PROCESSING',
         };
        
     }

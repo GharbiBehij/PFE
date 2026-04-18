@@ -5,9 +5,14 @@ import { TransactionRepository } from './transaction.repository';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OfferModule } from '../offer/offer.module';
 import { EsimModule } from '../esim/esim.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [OfferModule, forwardRef(() => EsimModule)],
+  imports: [
+    OfferModule,
+    forwardRef(() => EsimModule),
+    forwardRef(() => UserModule),
+  ],
   controllers: [TransactionController],
   providers: [TransactionService, TransactionRepository, PrismaService],
   exports: [TransactionService, TransactionRepository],

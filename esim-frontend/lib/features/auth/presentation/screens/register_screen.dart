@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:esim_frontend/core/motion/widgets/motion_fade_slide_switcher.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_page_enter.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
 import 'package:esim_frontend/core/router/route_names.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
 import 'package:esim_frontend/features/auth/presentation/providers/auth_provider.dart';
 import 'package:esim_frontend/features/auth/presentation/widgets/register_form.dart';
+
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
@@ -32,7 +36,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         data: (state) {
           if (state is AuthAuthenticated) context.go(RouteNames.home);
         },
-        error: (err, __) {
+        error: (err, _) {
           setState(() {
             _errorMessage = err is Exception
                 ? err.toString().replaceFirst('Exception: ', '')
@@ -44,11 +48,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF6D28D9),
-      body: Column(
-        children: [
-          _buildGradientHeader(context),
-          Expanded(child: _buildBottomCard(context)),
-        ],
+      body: MotionPageEnter(
+        child: Column(
+          children: [
+            _buildGradientHeader(context),
+            Expanded(child: _buildBottomCard(context)),
+          ],
+        ),
       ),
     );
   }
@@ -149,20 +155,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: 24),
 
             // Error box
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, -0.1),
-                    end: Offset.zero,
-                  ).animate(anim),
-                  child: child,
-                ),
-              ),
+            MotionFadeSlideSwitcher(
               child: _errorMessage != null
-                  ? _ErrorBox(key: ValueKey(_errorMessage), message: _errorMessage!)
+                  ? _ErrorBox(
+                      key: ValueKey(_errorMessage),
+                      message: _errorMessage!,
+                    )
                   : const SizedBox.shrink(),
             ),
             if (_errorMessage != null) const SizedBox(height: 16),
@@ -212,7 +210,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             'Déjà un compte ? ',
             style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
           ),
-          GestureDetector(
+          MotionPressable(
             onTap: () => context.go(RouteNames.login),
             child: const Text(
               'Se connecter',
@@ -273,10 +271,7 @@ class _DecorativeCircle extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-      ),
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
   }
 }
@@ -297,7 +292,11 @@ class _ErrorBox extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 18),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFEF4444),
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

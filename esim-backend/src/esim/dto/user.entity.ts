@@ -101,6 +101,11 @@ esims?: Esim[] ;
 })
 segment?: Segment[] ;
 @ApiProperty({
+  type: 'string',
+  nullable: true,
+})
+phone: string  | null;
+@ApiProperty({
   type: () => TopUpRequest,
   isArray: true,
   required: false,

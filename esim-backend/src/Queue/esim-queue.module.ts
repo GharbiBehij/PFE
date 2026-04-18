@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ESIM_QUEUE } from './esim.queue';
 import { EsimProducer } from './esim.producer';
@@ -15,7 +15,7 @@ import { PrismaService } from '../../prisma/prisma.service';
   imports: [
     BullModule.registerQueue({ name: ESIM_QUEUE }),
     EsimModule,
-    TransactionModule,
+    forwardRef(() => TransactionModule),
     WalletModule,
     ProvisioningModule,
   ],

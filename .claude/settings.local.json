@@ -4,7 +4,11 @@
       "Bash(flutter analyze:*)",
       "Bash(xargs ls:*)",
       "Bash(xargs grep:*)",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "Bash(dart analyze:*)",
+      "Bash(npx jest:*)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.jest, null, 2\\)\\)\")",
+      "Bash(flutter pub:*)"
     ]
   }
 }

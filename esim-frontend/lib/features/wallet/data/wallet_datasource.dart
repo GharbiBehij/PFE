@@ -10,7 +10,7 @@ class WalletDatasource {
 
   Future<Map<String, dynamic>> getBalance() async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>('/wallet/balance');
+      final res = await _dio.get<Map<String, dynamic>>('/walletTransaction/balance');
       return res.data ?? <String, dynamic>{};
     } on DioException catch (e) {
       throw ErrorHandler.handle(e);
@@ -21,8 +21,8 @@ class WalletDatasource {
 
   Future<List<Map<String, dynamic>>> getHistory() async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>('/wallet/history');
-      final entries = (res.data?['entries'] as List<dynamic>? ?? <dynamic>[])
+      final res = await _dio.get<Map<String, dynamic>>('/walletTransaction/history');
+      final entries = (res.data?['data'] as List<dynamic>? ?? <dynamic>[])
           .cast<Map<String, dynamic>>();
       return entries;
     } on DioException catch (e) {
@@ -35,7 +35,7 @@ class WalletDatasource {
   Future<Map<String, dynamic>> topUp(int amount) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
-        '/wallet/topup',
+        '/walletTransaction/topup/request',
         data: {'amount': amount},
       );
       return res.data ?? <String, dynamic>{};

@@ -1,3 +1,4 @@
 import { CreateTransactionDto } from './create-transaction.dto';
+import { PartialType } from '@nestjs/swagger';
 
-export type UpdateTransactionDto = Partial<CreateTransactionDto>;
+export class UpdateTransactionDto extends PartialType(CreateTransactionDto) {}

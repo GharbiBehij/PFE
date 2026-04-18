@@ -46,4 +46,12 @@ hashedPassword: string ;
 @IsOptional()
 @IsString()
 hashedRefreshToken?: string  | null;
+@ApiProperty({
+  type: 'string',
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+@IsString()
+phone?: string  | null;
 }

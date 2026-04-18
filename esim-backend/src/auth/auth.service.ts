@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { userService } from '../user/user.service';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
-import { refreshDto } from './dto/refresh.dto';
+import { RefreshDto } from './dto/refresh.dto';
 import { UserStatus } from '@prisma/client';
 
 @Injectable()
@@ -53,12 +53,26 @@ export class AuthService {
     return this.toPublicUser(user);
   }
 
-  async refresh(dto: refreshDto) {
+  async refresh(dto: RefreshDto) {
     const isValid = await this.userService.validateRefreshToken(dto.id, dto.refreshToken);
     if (!isValid) throw new UnauthorizedException('Invalid refresh token');
 
     const user = await this.userService.findById(dto.id);
     return this.generateAndSaveTokens(user);
+  }
+
+  async refreshByToken(refreshToken: string) {
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(refreshToken);
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return this.refresh({
+      id: payload.sub,
+      refreshToken,
+    });
   }
 
   async generateAndSaveTokens(user: any) {

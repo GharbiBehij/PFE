@@ -141,6 +141,8 @@ export class PurchaseService {
                         userId,
                         providerId: tx.offer.providerId,
                         transactionId,
+                        offerId: tx.offer.id,
+                        dataTotal: tx.offer.dataVolume,
                     },
                 });
 

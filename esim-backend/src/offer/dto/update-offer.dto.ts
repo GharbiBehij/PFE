@@ -1,3 +1,8 @@
+import { PartialType } from '@nestjs/swagger';
 import { CreateOfferDto } from './create-offer.dto';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export type UpdateOfferDto = Partial<CreateOfferDto>
+export class UpdateOfferDto extends PartialType(CreateOfferDto) {
+	@ApiPropertyOptional({ example: true })
+	isDeleted?: boolean;
+}

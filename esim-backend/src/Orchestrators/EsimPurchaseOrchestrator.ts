@@ -81,7 +81,7 @@ export class EsimPurchaseOrchestrator {
                 status: EsimStatus.NOT_ACTIVE,
                 message: paymentResponse.error,
             });
-            return { transactionId, message: 'PAYMENT_FAILED', error: paymentResponse.error };
+            return { transactionId, status: 'FAILED', message: 'PAYMENT_FAILED', error: paymentResponse.error };
         }
 
         
@@ -104,10 +104,10 @@ export class EsimPurchaseOrchestrator {
                 status: EsimStatus.NOT_ACTIVE,
                 message: `Failed to enqueue job: ${error instanceof Error ? error.message : String(error)}`,
             });
-            return { transactionId, message: 'QUEUE_FAILED' };
+            return { transactionId, status: 'FAILED', message: 'QUEUE_FAILED' };
         }
 
-        return { transactionId, message: 'SUCCESS' };
+        return { transactionId, status: 'PENDING', message: 'SUCCESS' };
     }
 
     private async processB2B2C(

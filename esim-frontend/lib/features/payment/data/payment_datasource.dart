@@ -13,11 +13,12 @@ class PaymentDatasource {
     required String paymentMethod,
   }) async {
     try {
+      final apiMethod = paymentMethod.toLowerCase() == 'wallet' ? 'WALLET' : 'CASH';
       final res = await _dio.post<Map<String, dynamic>>(
-        '/transactions/purchase',
+        '/transaction/purchase',
         data: {
           'offerId': offerId,
-          'paymentMethod': paymentMethod,
+          'paymentMethod': apiMethod,
         },
       );
       return res.data!;

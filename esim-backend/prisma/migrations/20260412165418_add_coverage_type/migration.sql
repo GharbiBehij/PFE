@@ -1,0 +1,2 @@
+-- CreateEnum
+CREATE TYPE "OfferCategory" AS ENUM ('STUDENT', 'STREAMER', 'INFLUENCER');

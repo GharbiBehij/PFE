@@ -20,7 +20,7 @@ export class EsimProducer {
     }
     async enqueuePurchase(data: PurchaseJobData) {
         return this.queue.add(JOB_PURCHASE_ESIM, data, {
-            jobId: `activate-${data.transactionId}`,
+            jobId: `purchase-${data.transactionId}`,
             backoff: {
                 type: 'exponential',
                 delay: 3000,

@@ -44,6 +44,15 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## API Documentation
+
+Interactive API docs are available at:
+
+- **Local:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+- **Staging:** [https://staging.netyfly.com/api/docs](https://staging.netyfly.com/api/docs) (if enabled)
+
+Swagger UI includes request/response schemas and authentication support for testing endpoints.
+
 ## Run tests
 
 ```bash

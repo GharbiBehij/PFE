@@ -27,7 +27,7 @@ class RouteNames {
 
   // ── eSIM management (inside shell) ───────────────────────────────────────
   static const esimList = '/my-esims';           // same as myEsims tab
-  static String esimDetail(String id) => '/esims/$id';
+  static String esimDetail(String id) => '/my-esims/$id';
   static const sellEsim = '/sell-esim';
   static const buyEsim = '/buy-esim';
 
@@ -40,6 +40,12 @@ class RouteNames {
   static const dashboard = '/dashboard';
   static const usage = '/usage';
   static const purchase = '/purchase';
+
+  // ── Profile sub-screens (outside shell — no bottom nav) ─────────────────
+  static const profilePersonal = '/profile/personal';
+  static const profilePayment = '/profile/payment';
+  static const profileSettings = '/profile/settings';
+  static const profileHelp = '/profile/help';
 
   // ── Offers legacy alias ──────────────────────────────────────────────────
   static const offers = '/offers';

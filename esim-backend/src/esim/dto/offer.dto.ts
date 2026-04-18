@@ -1,4 +1,5 @@
 
+import {CoverageType} from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 
 
@@ -36,6 +37,11 @@ description: string ;
   type: 'string',
 })
 popularity: string ;
+@ApiProperty({
+  enum: CoverageType,
+  enumName: 'CoverageType',
+})
+coverageType: CoverageType ;
 @ApiProperty({
   type: 'integer',
   format: 'int32',

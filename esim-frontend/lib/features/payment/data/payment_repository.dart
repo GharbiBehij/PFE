@@ -1,3 +1,4 @@
+import 'package:esim_frontend/features/payment/data/dto/purchase_result_dto.dart';
 import 'package:esim_frontend/features/payment/data/payment_datasource.dart';
 import 'package:esim_frontend/features/payment/models/purchase_result.dart';
 
@@ -14,6 +15,6 @@ class PaymentRepository {
       offerId: offerId,
       paymentMethod: paymentMethod,
     );
-    return PurchaseResult.fromJson(raw);
+    return PurchaseResultDto.fromJson(raw).toDomain();
   }
 }

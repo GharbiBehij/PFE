@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+
+import 'package:esim_frontend/core/motion/widgets/motion_page_enter.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_stagger_list.dart';
 import 'package:esim_frontend/core/router/route_names.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
 import 'package:esim_frontend/core/widgets/empty_state.dart';
@@ -111,8 +116,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         elevation: 2,
         shadowColor: const Color(0x14000000),
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
+      body: MotionPageEnter(
+        child: RefreshIndicator(
+          onRefresh: () async {
           ref.invalidate(walletBalanceProvider);
           ref.invalidate(walletHistoryProvider);
         },
@@ -122,7 +128,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             balanceAsync.when(
               data: (balance) => _BalanceCard(balanceText: balance.formatted),
               loading: () => const _BalanceCard(balanceText: '...'),
-              error: (_, __) => const _BalanceCard(balanceText: 'Erreur'),
+              error: (_, _) => const _BalanceCard(balanceText: 'Erreur'),
             ),
             const SizedBox(height: 20),
             const Text(
@@ -147,8 +153,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               itemBuilder: (_, i) {
                 final value = _presetAmounts[i];
                 final selected = _selectedAmountDinars == value;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(16),
+                return MotionPressable(
                   onTap: () {
                     setState(() => _selectedAmountDinars = value);
                     _customAmountController.clear();
@@ -203,14 +208,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFACC15),
-                  foregroundColor: const Color(0xFF111827),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                onPressed: topUpState is TopUpLoading
-                    ? null
+              child: MotionPressable(
+                onTap: topUpState is TopUpLoading
+                    ? () {}
                     : () {
                         final amount = _resolveAmountInCents();
                         if (amount == null) {
@@ -224,16 +224,24 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                         }
                         ref.read(topUpProvider.notifier).topUp(amount);
                       },
-                child: topUpState is TopUpLoading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text(
-                        'Recharger',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                child: Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFACC15),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  alignment: Alignment.center,
+                  child: topUpState is TopUpLoading
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF111827)),
+                        )
+                      : const Text(
+                          'Recharger',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF111827)),
+                        ),
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -248,8 +256,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     color: Color(0xFF1F2937),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => setState(() => _showAllHistory = !_showAllHistory),
+                MotionPressable(
+                  onTap: () => setState(() => _showAllHistory = !_showAllHistory),
+                  haptic: HapticFeedback.selectionClick,
                   child: Text(
                     _showAllHistory ? 'Reduire' : 'Tout voir',
                     style: const TextStyle(
@@ -265,7 +274,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 padding: EdgeInsets.all(24),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, __) => const Padding(
+              error: (_, _) => const Padding(
                 padding: EdgeInsets.only(top: 12),
                 child: EmptyState(message: 'Erreur de chargement de l\'historique'),
               ),
@@ -280,7 +289,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   );
                 }
 
-                return Column(
+                return MotionStaggerList(
                   children: visible
                       .map(
                         (e) => _LedgerRow(
@@ -293,12 +302,30 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               },
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => context.push(RouteNames.topup),
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Aller au rechargement complet'),
+            MotionPressable(
+              onTap: () => context.push(RouteNames.topup),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.add_circle_outline, color: Color(0xFF4B5563)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Aller au rechargement complet',
+                      style: TextStyle(color: Color(0xFF4B5563), fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
+      ),
         ),
       ),
     );

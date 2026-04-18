@@ -10,7 +10,7 @@ class TransactionDatasource {
 
   Future<List<Map<String, dynamic>>> getUserTransactions() async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>('/transactions');
+      final res = await _dio.get<Map<String, dynamic>>('/transaction');
       final list = (res.data?['transactions'] as List<dynamic>? ?? <dynamic>[])
           .cast<Map<String, dynamic>>();
       return list;
@@ -23,7 +23,7 @@ class TransactionDatasource {
 
   Future<Map<String, dynamic>> getTransactionDetail(int id) async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>('/transactions/$id');
+      final res = await _dio.get<Map<String, dynamic>>('/transaction/$id');
       return res.data ?? <String, dynamic>{};
     } on DioException catch (e) {
       throw ErrorHandler.handle(e);

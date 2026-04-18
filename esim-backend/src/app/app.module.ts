@@ -13,12 +13,32 @@ import { ProvisioningModule } from 'src/ProvisionningEvent/EsimAuditLog.module';
 import { EsimQueueModule } from 'src/Queue/esim-queue.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-redis-store';
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
     ThrottlerModule.forRoot([{
       ttl: 600,
       limit: 10,
     }]),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => ({
+        // Redis cache with 5-minute TTL for read-heavy endpoints.
+        store: await redisStore({
+          socket: {
+            host: config.get<string>('REDIS_HOST', 'localhost'),
+            port: config.get<number>('REDIS_PORT', 6379),
+          },
+          ttl: 300,
+        }),
+      }),
+    }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -39,9 +59,6 @@ import { BullModule } from '@nestjs/bullmq';
     PaymentModule,
     ProvisioningModule,
     EsimQueueModule,
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
   ],
   controllers: [AppController],
   providers: [

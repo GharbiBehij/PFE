@@ -1,6 +1,9 @@
-import { Inject, Injectable, UnauthorizedException, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException, ConflictException, NotFoundException, forwardRef } from '@nestjs/common';
 import { userRepository } from './user.repository';
 import { CreateUserDto } from './dto/Create.User.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ProfileResponseDto } from './dto/profile-response.dto';
 import * as bcrypt from 'bcrypt';
 import { TransactionChannel, UserStatus, TransactionStatus } from '@prisma/client';
 import { EsimPurchaseOrchestrator } from '../Orchestrators/EsimPurchaseOrchestrator';
@@ -53,6 +56,46 @@ export class userService {
 
   async StoreHashedRefreshToken(userId: number, refreshToken: string) {
     return this.userRepository.StoreHashedRefreshToken(userId, refreshToken);
+  }
+
+  async getProfile(userId: number): Promise<ProfileResponseDto> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    return this.toProfileDto(user);
+  }
+
+  async updateProfile(userId: number, dto: UpdateProfileDto): Promise<ProfileResponseDto> {
+    if (dto.email) {
+      const conflict = await this.userRepository.findByEmailExcludingUser(dto.email, userId);
+      if (conflict) throw new ConflictException('Email already taken');
+    }
+    const updated = await this.userRepository.updateProfile(userId, dto);
+    return this.toProfileDto(updated);
+  }
+
+  async changePassword(userId: number, dto: ChangePasswordDto): Promise<{ message: string }> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const match = await bcrypt.compare(dto.currentPassword, user.hashedPassword);
+    if (!match) throw new UnauthorizedException('Current password is incorrect');
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
+    await this.userRepository.updateProfile(userId, { hashedPassword });
+    return { message: 'Password changed successfully' };
+  }
+
+  private toProfileDto(user: any): ProfileResponseDto {
+    return {
+      id: user.id,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      email: user.email,
+      phone: user.phone ?? null,
+      role: user.role,
+      balance: user.balance,
+      createdAt: user.createdAt,
+    };
   }
 
   async sellEsim(dto: SellEsimDto, salesmanId: number) {

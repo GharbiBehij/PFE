@@ -15,18 +15,7 @@ class TransactionEsim {
   final DateTime? activatedAt;
   final DateTime? expiresAt;
 
-  factory TransactionEsim.fromJson(Map<String, dynamic> json) {
-    return TransactionEsim(
-      id: (json['id'] as num).toInt(),
-      offerId: (json['offerId'] as num?)?.toInt() ?? 0,
-      qrCode: json['qrCode'] as String?,
-      status: (json['status'] ?? '').toString(),
-      activatedAt: DateTime.tryParse((json['activatedAt'] ?? '').toString()),
-      expiresAt: DateTime.tryParse((json['expiresAt'] ?? '').toString()),
-    );
-  }
-
   bool get isActive => status == 'ACTIVE';
   bool get isExpired => status == 'EXPIRED';
-  int? get daysRemaining => expiresAt != null ? expiresAt!.difference(DateTime.now()).inDays : null;
+  int? get daysRemaining => expiresAt?.difference(DateTime.now()).inDays;
 }

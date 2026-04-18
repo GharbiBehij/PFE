@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:esim_frontend/core/motion/app_motion.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
 
 class PackageCard extends StatelessWidget {
@@ -16,8 +17,8 @@ class PackageCard extends StatelessWidget {
   });
 
   final String id;
-  final String dataAmount;   // e.g. "5 GB"
-  final int validity;        // days
+  final String dataAmount; // e.g. "5 GB"
+  final int validity; // days
   final double price;
   final List<String> features;
   final VoidCallback onTap;
@@ -29,21 +30,27 @@ class PackageCard extends StatelessWidget {
     final borderColor = isSelected
         ? AppColors.primary
         : isBestValue
-            ? AppColors.secondary
-            : AppColors.divider;
+        ? AppColors.secondary
+        : AppColors.divider;
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
         // Card body
         AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: AppMotion.normal,
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: AppRadius.cardRadius,
             border: Border.all(color: borderColor, width: isSelected ? 2 : 1.5),
             boxShadow: isSelected
-                ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4))]
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
                 : null,
           ),
           padding: const EdgeInsets.all(24),
@@ -70,11 +77,18 @@ class PackageCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textSecondary),
+                            const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '$validity days',
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
@@ -96,7 +110,10 @@ class PackageCard extends StatelessWidget {
                       ),
                       const Text(
                         'Total',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -113,9 +130,19 @@ class PackageCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.success),
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 16,
+                        color: AppColors.success,
+                      ),
                       const SizedBox(width: 8),
-                      Text(f, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                      Text(
+                        f,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -183,7 +210,11 @@ class PackageCard extends StatelessWidget {
               ),
               child: const Text(
                 'Selected',
-                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),

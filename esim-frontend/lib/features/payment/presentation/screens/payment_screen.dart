@@ -1,15 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:esim_frontend/core/router/route_names.dart';
+import 'package:flutter/services.dart';
+
+import 'package:esim_frontend/core/motion/app_motion.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_page_enter.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
+import 'package:esim_frontend/core/widgets/country_flag.dart';
 import 'package:esim_frontend/core/widgets/empty_state.dart';
-import 'package:esim_frontend/features/auth/presentation/providers/auth_provider.dart';
 import 'package:esim_frontend/features/offers/models/offer.dart';
 import 'package:esim_frontend/features/offers/presentation/providers/offer_providers.dart';
-import 'package:esim_frontend/features/payment/presentation/providers/payment_providers.dart';
-import 'package:esim_frontend/features/wallet/presentation/providers/wallet_providers.dart';
 
 class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({required this.packageId, super.key});
@@ -22,193 +26,124 @@ class PaymentScreen extends ConsumerStatefulWidget {
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   String _selectedMethod = 'card';
+  bool _isLoading = false;
 
   int get _offerId => int.tryParse(widget.packageId) ?? 0;
 
-  void _onPay(Offer offer, String paymentMethod) {
-    ref.read(purchaseProvider.notifier).purchase(
-          offerId: offer.id,
-          paymentMethod: paymentMethod,
-        );
+  Future<void> _onPayPressed() async {
+    if (_isLoading) return;
+
+    setState(() => _isLoading = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
   }
 
   @override
   Widget build(BuildContext context) {
     final offerAsync = ref.watch(offerDetailProvider(_offerId));
-    final purchaseState = ref.watch(purchaseProvider);
-    final authState = ref.watch(authProvider).valueOrNull;
-    final user = authState is AuthAuthenticated ? authState.user : null;
-    final walletBalanceAsync = ref.watch(walletBalanceProvider);
-
-    ref.listen<PurchaseState>(purchaseProvider, (_, next) {
-      if (next is PurchaseSuccess) {
-        ref.read(purchaseProvider.notifier).reset();
-        context.go(RouteNames.success, extra: next.result);
-      } else if (next is PurchaseError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.message),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    });
-
-    final isLoading = purchaseState is PurchaseLoading;
 
     return offerAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, _) => Scaffold(
         body: EmptyState(
-          message: 'Forfait introuvable',
+          message: 'Package not found',
           icon: Icons.error_outline,
           onRetry: () => ref.invalidate(offerDetailProvider(_offerId)),
         ),
       ),
-      data: (offer) {
-        final walletBalanceCents = walletBalanceAsync.valueOrNull?.balance ?? user?.balance ?? 0;
-        final walletBalanceLoading = walletBalanceAsync.isLoading;
-        // Wallet is reseller-only (B2B2C); B2C clients stay on direct payments.
-        final canUseWalletFlow = user?.isReseller == true;
-        return _buildScreen(
-          context,
-          offer,
-          isLoading,
-          walletBalanceCents,
-          walletBalanceLoading,
-          canUseWalletFlow,
-        );
-      },
+      data: (offer) => _CheckoutView(
+        offer: offer,
+        selectedMethod: _selectedMethod,
+        isLoading: _isLoading,
+        onSelectMethod: (method) {
+          if (_isLoading) return;
+          setState(() => _selectedMethod = method);
+        },
+        onPayPressed: _onPayPressed,
+      ),
     );
   }
+}
 
-  Widget _buildScreen(
-    BuildContext context,
-    Offer offer,
-    bool isLoading,
-    int walletBalanceCents,
-    bool walletBalanceLoading,
-    bool canUseWalletFlow,
-  ) {
+class _CheckoutView extends StatelessWidget {
+  const _CheckoutView({
+    required this.offer,
+    required this.selectedMethod,
+    required this.isLoading,
+    required this.onSelectMethod,
+    required this.onPayPressed,
+  });
+
+  final Offer offer;
+  final String selectedMethod;
+  final bool isLoading;
+  final ValueChanged<String> onSelectMethod;
+  final VoidCallback? onPayPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
-    final isWalletInsufficient = walletBalanceCents < offer.price;
-    final effectiveMethod = !canUseWalletFlow && _selectedMethod == 'wallet'
-        ? 'card'
-        : _selectedMethod;
-    final canSubmit = !isLoading && !(effectiveMethod == 'wallet' && isWalletInsufficient);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      // ── Header ──────────────────────────────────────────────────────────
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text(
-          'Paiement',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        centerTitle: true,
-        actions: const [SizedBox(width: 48)],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Color(0xFFE5E7EB)),
-        ),
-      ),
-
-      body: Stack(
-        children: [
+      body: MotionPageEnter(
+        child: Stack(
+          children: [
           SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, safeBottom + 88),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              safeTop + 84,
+              16,
+              safeBottom + 118,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Order Summary Card ─────────────────────────────────────
                 _OrderSummaryCard(offer: offer),
-                const SizedBox(height: 20),
-
-                // ── Payment Methods ────────────────────────────────────────
-                const Text(
-                  'Methode de paiement',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
+                const SizedBox(height: 24),
+                _PaymentMethodTile(
+                  value: 'card',
+                  selectedValue: selectedMethod,
+                  icon: Icons.credit_card_rounded,
+                  title: 'Carte bancaire',
+                  subtitle: 'Visa, Mastercard, etc.',
+                  onTap: () => onSelectMethod('card'),
                 ),
                 const SizedBox(height: 12),
-                _PaymentOption(
-                  value: 'card',
-                  selected: effectiveMethod,
-                  icon: Icons.credit_card,
-                  title: 'Carte bancaire',
-                  subtitle: 'Visa, Mastercard, Amex',
-                  onTap: () => setState(() => _selectedMethod = 'card'),
-                ),
-                const SizedBox(height: 10),
-                _PaymentOption(
+                _PaymentMethodTile(
                   value: 'apple_pay',
-                  selected: effectiveMethod,
-                  icon: Icons.smartphone,
+                  selectedValue: selectedMethod,
+                  icon: Icons.apple,
                   title: 'Apple Pay',
-                  subtitle: 'Rapide et securise',
-                  onTap: () => setState(() => _selectedMethod = 'apple_pay'),
+                  subtitle: 'Touch ID or Face ID',
+                  onTap: () => onSelectMethod('apple_pay'),
                 ),
-                if (canUseWalletFlow) ...[
-                  const SizedBox(height: 10),
-                  _PaymentOption(
-                    value: 'wallet',
-                    selected: effectiveMethod,
-                    icon: Icons.account_balance_wallet_outlined,
-                    title: 'Solde portefeuille',
-                    subtitle: walletBalanceLoading
-                        ? 'Chargement du solde...'
-                        : '${(walletBalanceCents / 100).toStringAsFixed(2)}TND disponible',
-                    enabled: !walletBalanceLoading && !isWalletInsufficient,
-                    warningText: isWalletInsufficient ? 'Solde insuffisant' : null,
-                    onTap: () => setState(() => _selectedMethod = 'wallet'),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Client B2C: paiement direct uniquement.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6B7280),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-
-                // ── Security badge ─────────────────────────────────────────
-                Row(
+                const SizedBox(height: 24),
+                const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.lock_outline, size: 12, color: Color(0xFF9CA3AF)),
-                    SizedBox(width: 4),
+                  children: [
+                    Icon(
+                      Icons.lock_outline_rounded,
+                      size: 14,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                    SizedBox(width: 6),
                     Text(
-                      'Paiement securise et chiffre',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF9CA3AF),
-                      ),
+                      'le payment est sécurisé',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-
-          // ── Sticky pay button ──────────────────────────────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _StickyHeader(safeTop: safeTop),
+          ),
           Positioned(
             bottom: 0,
             left: 0,
@@ -217,175 +152,178 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               padding: EdgeInsets.fromLTRB(16, 12, 16, safeBottom + 12),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                border: Border(top: BorderSide(color: AppColors.divider)),
+                border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
                 boxShadow: [
                   BoxShadow(
-                    color: Color(0x1A000000),
-                    blurRadius: 8,
-                    offset: Offset(0, -2),
+                    color: Color(0x12000000),
+                    blurRadius: 16,
+                    offset: Offset(0, -4),
                   ),
                 ],
               ),
-              child: ElevatedButton(
-                onPressed: canSubmit ? () => _onPay(offer, effectiveMethod) : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
-                  foregroundColor: const Color(0xFF3B0764), // violet-900
-                  disabledBackgroundColor: AppColors.divider,
-                  disabledForegroundColor: AppColors.textSecondary,
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                child: isLoading
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF3B0764),
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                          Text('Traitement...'),
-                        ],
-                      )
-                    : const Text('Confirmer et payer'),
+              child: _PayButton(isLoading: isLoading, onPressed: onPayPressed),
+            ),
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+}
+
+class _StickyHeader extends StatelessWidget {
+  const _StickyHeader({required this.safeTop});
+
+  final double safeTop;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, safeTop + 12, 20, 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+      ),
+      child: Row(
+        children: [
+          MotionPressable(
+            onTap: () => context.pop(),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF3F4F6),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_back_rounded,
+                size: 20,
+                color: AppColors.textPrimary,
               ),
             ),
           ),
+          const Expanded(
+            child: Text(
+              'Checkout',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
+            ),
+          ),
+          const SizedBox(width: 40),
         ],
       ),
     );
   }
 }
 
-// ── Order Summary Card ─────────────────────────────────────────────────────
-
 class _OrderSummaryCard extends StatelessWidget {
   const _OrderSummaryCard({required this.offer});
 
   final Offer offer;
 
+  String _formatTND(int millimes) {
+    final value = millimes / 1000;
+    return '${value.toStringAsFixed(2)}TND';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final subtotal = _formatTND(offer.price);
+    const taxes = '0.00TND';
+
     return Container(
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Column(
         children: [
-          // ── Plan row ──────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'PLAN',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        offer.formattedData,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${offer.formattedValidity} · ${offer.country}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEDE9FE), // violet-50
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.public,
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: Color(0xFFF3F4F6)),
-
-          // ── Price breakdown ────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _PriceRow(
-                  label: 'Sous-total',
-                  value: offer.formattedPrice,
-                ),
-                const SizedBox(height: 8),
-                const _PriceRow(label: 'Taxes', value: '0.00€'),
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: Color(0xFFF3F4F6)),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Total',
+                      'PLAN',
                       style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                        fontSize: 11,
+                        height: 1,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF9CA3AF),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        CountryFlag(
+                          countryCode: offer.country,
+                          size: FlagSize.md,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${offer.formattedData} Data',
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            height: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Text(
-                      offer.formattedPrice,
+                      '${offer.validityDays} Days • ${offer.country}',
                       style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: Color(0xFF6B7280),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEDE9FE),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.public_rounded,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 20),
+          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+          const SizedBox(height: 16),
+          _PriceRow(label: 'Subtotal', value: subtotal),
+          const SizedBox(height: 10),
+          const _PriceRow(label: 'Taxes', value: taxes),
+          const SizedBox(height: 14),
+          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+          const SizedBox(height: 14),
+          _PriceRow(label: 'Total', value: subtotal, highlighted: true),
         ],
       ),
     );
@@ -393,152 +331,236 @@ class _OrderSummaryCard extends StatelessWidget {
 }
 
 class _PriceRow extends StatelessWidget {
-  const _PriceRow({required this.label, required this.value});
+  const _PriceRow({
+    required this.label,
+    required this.value,
+    this.highlighted = false,
+  });
 
   final String label;
   final String value;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
+    final labelStyle = TextStyle(
+      color: highlighted ? AppColors.textPrimary : const Color(0xFF6B7280),
+      fontSize: highlighted ? 16 : 14,
+      fontWeight: highlighted ? FontWeight.w700 : FontWeight.w500,
+    );
+
+    final valueStyle = TextStyle(
+      color: highlighted ? AppColors.primary : const Color(0xFF6B7280),
+      fontSize: highlighted ? 24 : 14,
+      fontWeight: highlighted ? FontWeight.w700 : FontWeight.w500,
+      height: highlighted ? 1 : 1.1,
+    );
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 14, color: Color(0xFF4B5563)),
-        ),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 14, color: Color(0xFF4B5563)),
-        ),
+        Text(label, style: labelStyle),
+        Text(value, style: valueStyle),
       ],
     );
   }
 }
 
-// ── Payment Option ─────────────────────────────────────────────────────────
-
-class _PaymentOption extends StatelessWidget {
-  const _PaymentOption({
+class _PaymentMethodTile extends StatefulWidget {
+  const _PaymentMethodTile({
     required this.value,
-    required this.selected,
+    required this.selectedValue,
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.enabled = true,
-    this.warningText,
   });
 
   final String value;
-  final String selected;
+  final String selectedValue;
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final bool enabled;
-  final String? warningText;
 
-  bool get _isSelected => value == selected;
+  @override
+  State<_PaymentMethodTile> createState() => _PaymentMethodTileState();
+}
+
+class _PaymentMethodTileState extends State<_PaymentMethodTile> {
+  bool get _isSelected => widget.value == widget.selectedValue;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
+    return MotionPressable(
+      onTap: widget.onTap,
+      haptic: HapticFeedback.selectionClick,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _isSelected && enabled
-              ? const Color(0xFFF5F3FF).withValues(alpha: 0.5) // violet-50/50
-              : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _isSelected && enabled
-                ? AppColors.primary
-                : const Color(0xFFD1D5DB),
-            width: 2,
+          duration: AppMotion.fast,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _isSelected ? AppColors.primary : AppColors.divider,
+              width: _isSelected ? 2 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _isSelected
+                    ? AppColors.primary.withValues(alpha: 0.10)
+                    : Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _isSelected && enabled
-                    ? const Color(0xFFEDE9FE) // violet-100
-                    : const Color(0xFFF3F4F6), // gray-100
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                color: _isSelected && enabled
-                    ? AppColors.primary
-                    : (enabled
-                        ? AppColors.textSecondary
-                        : const Color(0xFF9CA3AF)),
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: _isSelected && enabled
-                          ? AppColors.primary
-                          : (enabled
-                              ? AppColors.textPrimary
-                              : const Color(0xFF9CA3AF)),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  if (warningText != null)
-                    Text(
-                      warningText!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFEF4444),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Radio indicator
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isSelected && enabled
-                    ? AppColors.primary
-                    : Colors.transparent,
-                border: Border.all(
-                  color: _isSelected && enabled
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _isSelected
+                      ? const Color(0xFFEDE9FE)
+                      : const Color(0xFFF3F4F6),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  widget.icon,
+                  color: _isSelected
                       ? AppColors.primary
-                      : const Color(0xFFD1D5DB), // gray-300
-                  width: 2,
+                      : const Color(0xFF6B7280),
+                  size: 22,
                 ),
               ),
-              child: _isSelected && enabled
-                  ? const Icon(Icons.check, size: 12, color: Colors.white)
-                  : null,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.subtitle,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _isSelected
+                        ? AppColors.primary
+                        : const Color(0xFFD1D5DB),
+                    width: 2,
+                  ),
+                ),
+                child: _isSelected
+                    ? Center(
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ],
+          ),
+        ),
+    );
+  }
+}
+
+class _PayButton extends StatelessWidget {
+  const _PayButton({required this.isLoading, required this.onPressed});
+
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = onPressed == null;
+    final canTap = onPressed != null && !isLoading;
+
+    return AnimatedOpacity(
+      duration: AppMotion.fast,
+      opacity: isDisabled ? 0.55 : 1,
+      child: Container(
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: isDisabled
+              ? null
+              : [
+                  BoxShadow(
+                    color: AppColors.secondary.withValues(alpha: 0.45),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        child: MotionPressable(
+          onTap: canTap ? onPressed! : () {},
+          haptic: HapticFeedback.lightImpact,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.secondary,
+              borderRadius: BorderRadius.circular(20),
             ),
-          ],
+            child: Center(
+              child: isLoading
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Color(0xFF3B0764),
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Processing...',
+                          style: TextStyle(
+                            color: Color(0xFF3B0764),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    )
+                  : const Text(
+                      'Confirm & Pay',
+                      style: TextStyle(
+                        color: Color(0xFF3B0764),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+          ),
         ),
       ),
     );

@@ -29,6 +29,27 @@ status: EsimStatus ;
 event: EsimEventStatus ;
 @ApiProperty({
   type: 'string',
+  nullable: true,
+})
+qrCode: string  | null;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+dataTotal: number ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+dataUsed: number ;
+@ApiProperty({
+  type: 'string',
+  format: 'date-time',
+  nullable: true,
+})
+lastUsageSync: Date  | null;
+@ApiProperty({
+  type: 'string',
   format: 'date-time',
 })
 createdAt: Date ;

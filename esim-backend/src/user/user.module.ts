@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { userService } from './user.service';
 import { userController } from './user.controller';
 import { userRepository } from './user.repository';
@@ -12,7 +12,7 @@ import { WalletModule } from '../WalletTransaction/wallet.module';
 
 @Module({
   imports: [
-    TransactionModule,
+    forwardRef(() => TransactionModule),
     EsimQueueModule,
     PaymentModule,
     ProvisioningModule,
@@ -20,6 +20,6 @@ import { WalletModule } from '../WalletTransaction/wallet.module';
   ],
   controllers: [userController],
   providers: [userService, userRepository, PrismaService, EsimPurchaseOrchestrator],
-  exports: [userService],
+  exports: [userService, EsimPurchaseOrchestrator],
 })
 export class UserModule {}

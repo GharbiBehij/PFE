@@ -36,4 +36,14 @@ export class userRepository {
         })
     }
 
+    async updateProfile(userId: number, data: Prisma.UserUpdateInput) {
+        return this.prisma.user.update({ where: { id: userId }, data });
+    }
+
+    async findByEmailExcludingUser(email: string, excludeUserId: number) {
+        return this.prisma.user.findFirst({
+            where: { email, id: { not: excludeUserId } },
+        });
+    }
+
 }

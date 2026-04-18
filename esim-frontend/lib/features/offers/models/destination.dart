@@ -4,19 +4,16 @@ class Destination {
     required this.region,
     required this.imageUrl,
     required this.lowestPrice,
+    this.coverageType = 'LOCAL',
+    this.popularity = 0,
   });
 
   final String country;
   final String region;
   final String imageUrl;
   final int lowestPrice; // cents
+  final String coverageType; // LOCAL | REGIONAL | GLOBAL
+  final int popularity;
 
-  factory Destination.fromJson(Map<String, dynamic> json) => Destination(
-        country: json['country'] as String,
-      region: (json['region'] ?? json['Region'] ?? '') as String,
-        imageUrl: json['imageUrl'] as String? ?? '',
-      lowestPrice: (json['lowestPrice'] ?? json['price'] ?? 0) as int,
-      );
-
-  String get formattedPrice => '${(lowestPrice / 100).toStringAsFixed(0)}€';
+  String get formattedPrice => '${(lowestPrice / 1000).toStringAsFixed(3)} TND';
 }

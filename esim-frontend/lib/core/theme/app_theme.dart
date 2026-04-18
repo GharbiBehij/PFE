@@ -2,16 +2,78 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   const AppColors._();
-
-  static const primary = Color(0xFF7C3AED);      // violet-600
-  static const secondary = Color(0xFFFACC15);    // yellow-400
-  static const background = Color(0xFFF9FAFB);   // gray-50
-  static const surface = Color(0xFFFFFFFF);      // white
-  static const textPrimary = Color(0xFF1F2937);  // gray-800
+  // Purple Family (Brand)
+  static const primary = Color(0xFF7C3AED);       // violet-600 (main)
+  static const primaryLight = Color(0xFF8B5CF6);  // violet-500
+  static const primaryDark = Color(0xFF6D28D9);   // violet-700
+  static const primaryBg = Color(0xFFF5F3FF);     // violet-50 (subtle backgrounds)
+  static const primaryContainer = Color(0xFFEDE9FE); // violet-100 (active states)
+  
+  // Accent (Use ONLY for CTAs)
+  static const secondary = Color(0xFFFACC15);     // yellow-400
+  static const secondaryDark = Color(0xFFFBBF24); // yellow-500
+  
+  // Neutrals
+  static const background = Color(0xFFFAFAFA);    // warm-gray-50
+  static const surface = Color(0xFFFFFFFF);       // white
+  static const surfaceElevated = Color(0xFFFAFAFA); // subtle elevation
+  
+  // Borders & Dividers
+  static const divider = Color(0xFFE5E7EB);       // gray-200
+  static const border = Color(0xFFE5E7EB);        // gray-200
+  static const borderLight = Color(0xFFF3F4F6);   // gray-100
+  
+  // Text
+  static const textDark = Color(0xFF111827);      // gray-900
+  static const textPrimary = Color(0xFF111827);   // gray-900 (darker)
   static const textSecondary = Color(0xFF6B7280); // gray-500
-  static const error = Color(0xFFEF4444);        // red-500
-  static const success = Color(0xFF10B981);      // emerald-500
-  static const divider = Color(0xFFE5E7EB);      // gray-200
+  static const textTertiary = Color(0xFF9CA3AF);  // gray-400
+  
+  // Semantic
+  static const error = Color(0xFFEF4444);         // red-500
+  static const success = Color(0xFF10B981);       // emerald-500
+  static const warning = Color(0xFFF59E0B);       // amber-500
+} 
+class AppSpacing {
+  const AppSpacing._();
+  
+  static const double xs = 4.0;
+  static const double sm = 8.0;
+  static const double md = 12.0;
+  static const double lg = 16.0;
+  static const double xl = 24.0;
+  static const double xxl = 32.0;
+  static const double xxxl = 48.0;
+}
+class AppElevation {
+  const AppElevation._();
+  
+  static List<BoxShadow> get low => [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.03),
+      blurRadius: 6,
+      spreadRadius: 0,
+      offset: const Offset(0, 2),
+    ),
+  ];
+
+  static List<BoxShadow> get medium => [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.04),
+      blurRadius: 12,
+      spreadRadius: 0,
+      offset: const Offset(0, 3),
+    ),
+  ];
+
+  static List<BoxShadow> get high => [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.06),
+      blurRadius: 16,
+      spreadRadius: 0,
+      offset: const Offset(0, 4),
+    ),
+  ];
 }
 
 class AppRadius {
@@ -94,6 +156,7 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
           minimumSize: const Size(double.infinity, 52),
+          elevation: 0,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(

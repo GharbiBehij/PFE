@@ -1,7 +1,36 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ANDROID_HOME=\"C:/Users/Lenovo/AppData/Local/Android/Sdk\" C:/Users/Lenovo/Downloads/flutter/flutter/bin/flutter.bat doctor:*)"
+      "Bash(ANDROID_HOME=\"C:/Users/Lenovo/AppData/Local/Android/Sdk\" C:/Users/Lenovo/Downloads/flutter/flutter/bin/flutter.bat doctor:*)",
+      "Bash(npx prisma:*)",
+      "Bash(grep -l \"from.*entity\" C:/Users/Lenovo/Desktop/PFE/esim-backend/src/esim/dto/*.dto.ts)",
+      "Bash(mv src/esim/dto/offer.dto.ts src/offer/dto/)",
+      "Bash(mv src/esim/dto/connect-offer.dto.ts src/offer/dto/)",
+      "Bash(rm src/esim/dto/create-offer.dto.ts src/esim/dto/update-offer.dto.ts)",
+      "Bash(mv src/esim/dto/transaction.dto.ts src/transaction/dto/)",
+      "Bash(mv src/esim/dto/connect-transaction.dto.ts src/transaction/dto/)",
+      "Bash(rm src/esim/dto/create-transaction.dto.ts src/esim/dto/update-transaction.dto.ts)",
+      "Bash(mv src/esim/dto/payment.dto.ts src/payment/dto/)",
+      "Bash(mv src/esim/dto/connect-payment.dto.ts src/payment/dto/)",
+      "Bash(mv src/esim/dto/walletLedger.dto.ts src/WalletTransaction/dto/)",
+      "Bash(mv src/esim/dto/create-walletLedger.dto.ts src/WalletTransaction/dto/)",
+      "Bash(mv src/esim/dto/update-walletLedger.dto.ts src/WalletTransaction/dto/)",
+      "Bash(mv src/esim/dto/connect-walletLedger.dto.ts src/WalletTransaction/dto/)",
+      "Bash(mv src/esim/dto/walletTransaction.dto.ts src/WalletTransaction/dto/)",
+      "Bash(mkdir -p src/ProvisionningEvent/dto)",
+      "Bash(mv src/esim/dto/provisioningEvent.dto.ts src/ProvisionningEvent/dto/)",
+      "Bash(mv src/esim/dto/create-provisioningEvent.dto.ts src/ProvisionningEvent/dto/)",
+      "Bash(mv src/esim/dto/update-provisioningEvent.dto.ts src/ProvisionningEvent/dto/)",
+      "Bash(mv src/esim/dto/connect-provisioningEvent.dto.ts src/ProvisionningEvent/dto/)",
+      "Bash(mkdir -p src/provider/dto src/segment/dto)",
+      "Bash(mv src/esim/dto/provider.dto.ts src/provider/dto/)",
+      "Bash(mv src/esim/dto/create-provider.dto.ts src/provider/dto/)",
+      "Bash(mv src/esim/dto/update-provider.dto.ts src/provider/dto/)",
+      "Bash(mv src/esim/dto/connect-provider.dto.ts src/provider/dto/)",
+      "Bash(find C:/Users/Lenovo/Desktop/PFE/esim-backend/src -name \"connect-*.dto.ts\" -delete)",
+      "Bash(cmd:*)",
+      "Bash(powershell:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

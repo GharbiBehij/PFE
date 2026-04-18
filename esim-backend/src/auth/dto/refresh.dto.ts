@@ -1,9 +1,12 @@
-import { IsInt, IsString } from "class-validator";
+import { IsInt, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
-export class refreshDto {
-    @IsString()
-    refreshToken: string
+export class RefreshDto {
+  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...', description: 'JWT refresh token' })
+  @IsString()
+  refreshToken: string;
 
-    @IsInt()
-    id: number
+  @ApiProperty({ example: 42, description: 'User ID' })
+  @IsInt()
+  id: number;
 }

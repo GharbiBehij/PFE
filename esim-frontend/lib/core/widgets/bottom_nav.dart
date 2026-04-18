@@ -11,7 +11,7 @@ class ScaffoldWithBottomNav extends StatelessWidget {
 
   static const _tabs = [
     _TabItem(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: RouteNames.home),
-    _TabItem(label: 'My eSIMs', icon: Icons.language_outlined, activeIcon: Icons.language, route: RouteNames.myEsims),
+    _TabItem(label: 'Mes eSIMs', icon: Icons.language_outlined, activeIcon: Icons.language, route: RouteNames.myEsims),
     _TabItem(label: 'Profile', icon: Icons.person_outline, activeIcon: Icons.person, route: RouteNames.profile),
   ];
 

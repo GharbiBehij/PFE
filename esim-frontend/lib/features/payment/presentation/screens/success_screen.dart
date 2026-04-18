@@ -1,378 +1,509 @@
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import 'package:esim_frontend/core/motion/app_motion.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_fade_slide_switcher.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_page_enter.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
 import 'package:esim_frontend/core/router/route_names.dart';
 import 'package:esim_frontend/features/payment/models/purchase_result.dart';
+import 'package:esim_frontend/features/payment/presentation/providers/payment_providers.dart';
 
-class SuccessScreen extends StatefulWidget {
+class SuccessScreen extends ConsumerStatefulWidget {
   const SuccessScreen({this.result, super.key});
 
   final PurchaseResult? result;
 
   @override
-  State<SuccessScreen> createState() => _SuccessScreenState();
+  ConsumerState<SuccessScreen> createState() => _SuccessScreenState();
 }
 
-class _SuccessScreenState extends State<SuccessScreen>
-    with TickerProviderStateMixin {
-  late final AnimationController _checkController;
-  late final AnimationController _contentController;
-
-  late final Animation<double> _checkScale;
-  late final Animation<double> _checkRotation;
+class _SuccessScreenState extends ConsumerState<SuccessScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _iconProgress;
   late final Animation<double> _textOpacity;
-  late final Animation<Offset> _cardSlide;
+  late final Animation<Offset> _textOffset;
+  late final Animation<double> _cardOpacity;
+  late final Animation<Offset> _cardOffset;
 
+  Timer? _copiedTimer;
+  Timer? _pollTimer;
   bool _copied = false;
+
+  static const _pollInterval = Duration(seconds: 3);
 
   @override
   void initState() {
     super.initState();
+    _controller = AnimationController(vsync: this, duration: AppMotion.slow);
 
-    // Redirect if navigated directly with no result
-    if (widget.result == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go(RouteNames.home);
-      });
-      return;
-    }
-
-    _checkController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
+    _iconProgress = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.0, 0.55, curve: AppMotion.elasticOut),
     );
-
-    _contentController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
+    _textOpacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.2, 0.55, curve: AppMotion.easeOut),
     );
-
-    _checkScale = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _checkController,
-        curve: Curves.elasticOut,
-      ),
+    _textOffset = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.2, 0.55, curve: AppMotion.easeOutCubic),
+          ),
+        );
+    _cardOpacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.4, 1.0, curve: AppMotion.easeOut),
     );
+    _cardOffset = Tween<Offset>(begin: const Offset(0, 0.16), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.4, 1.0, curve: AppMotion.easeOutCubic),
+          ),
+        );
 
-    _checkRotation = Tween<double>(begin: -0.5, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _checkController,
-        curve: Curves.easeOutBack,
-      ),
-    );
+    _controller.forward();
+    _maybeStartPolling();
+  }
 
-    _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _contentController,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
-      ),
-    );
-
-    _cardSlide = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _contentController,
-        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
-      ),
-    );
-
-    _checkController.forward();
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) _contentController.forward();
+  void _maybeStartPolling() {
+    if (widget.result == null) return;
+    final id = widget.result!.transactionId;
+    _pollTimer = Timer.periodic(_pollInterval, (_) {
+      if (!mounted) {
+        _pollTimer?.cancel();
+        return;
+      }
+      final tx = ref.read(transactionDetailProvider(id)).value;
+      if (tx != null) {
+        final hasCode =
+            tx.esims?.isNotEmpty == true && tx.esims!.first.qrCode != null;
+        if (hasCode || tx.isFailed) {
+          _pollTimer?.cancel();
+          return;
+        }
+      }
+      ref.invalidate(transactionDetailProvider(id));
     });
   }
 
   @override
   void dispose() {
-    if (widget.result != null) {
-      _checkController.dispose();
-      _contentController.dispose();
-    }
+    _pollTimer?.cancel();
+    _copiedTimer?.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _copyCode() async {
-    final code = widget.result?.esim.qrCode;
-    if (code == null) return;
+  Future<void> _handleCopy(String code) async {
     await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+
     setState(() => _copied = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) setState(() => _copied = false);
+    _copiedTimer?.cancel();
+    _copiedTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _copied = false);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.result == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    final id = widget.result?.transactionId;
+    final tx = id != null
+        ? ref.watch(transactionDetailProvider(id)).value
+        : null;
+    final esims = tx?.esims;
+    final activationCode = (esims != null && esims.isNotEmpty)
+        ? esims.first.qrCode
+        : null;
+    final isProvisioning =
+        activationCode == null && (tx == null || !tx.isFailed);
+
+    if (id != null) {
+      ref.listen(transactionDetailProvider(id), (_, next) {
+        final transaction = next.value;
+        if (transaction == null) return;
+        final hasCode =
+            transaction.esims?.isNotEmpty == true &&
+            transaction.esims!.first.qrCode != null;
+        if (hasCode || transaction.isFailed) _pollTimer?.cancel();
+      });
     }
 
-    final esim = widget.result!.esim;
-    final safeBottom = MediaQuery.of(context).padding.bottom;
-    final safeTop = MediaQuery.of(context).padding.top;
-
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
+      body: MotionPageEnter(
+        child: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF7C3AED), Color(0xFF4338CA)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
           ),
         ),
         child: Stack(
           children: [
-            // ── Decorative blurred circles ─────────────────────────────
-            Positioned(
-              top: -80,
-              left: -80,
-              child: _BlurCircle(
-                size: 280,
-                color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
-              ),
+            const Positioned.fill(
+              child: IgnorePointer(child: _BackgroundDecorations()),
             ),
-            Positioned(
-              bottom: -100,
-              right: -80,
-              child: _BlurCircle(
-                size: 300,
-                color: const Color(0xFF6366F1).withValues(alpha: 0.5),
-              ),
-            ),
-
-            // ── Content ────────────────────────────────────────────────
-            SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(24, safeTop + 24, 24, safeBottom + 24),
-              child: Column(
-                children: [
-                  const SizedBox(height: 24),
-
-                  // ── Animated checkmark ─────────────────────────────
-                  AnimatedBuilder(
-                    animation: _checkController,
-                    builder: (_, _) => Transform.rotate(
-                      angle: _checkRotation.value * 3.14159,
-                      child: Transform.scale(
-                        scale: _checkScale.value,
-                        child: Container(
-                          width: 96,
-                          height: 96,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            size: 48,
-                            color: Color(0xFF10B981), // emerald-500
-                          ),
-                        ),
-                      ),
-                    ),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 24,
                   ),
-
-                  const SizedBox(height: 24),
-
-                  // ── Text (fade in) ────────────────────────────────
-                  FadeTransition(
-                    opacity: _textOpacity,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 390),
                     child: Column(
-                      children: const [
-                        Text(
-                          'Payment Successful!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedBuilder(
+                          animation: _iconProgress,
+                          builder: (context, child) {
+                            final t = _iconProgress.value
+                                .clamp(0.0, 1.0)
+                                .toDouble();
+                            final rotation = -math.pi * (1 - t);
+                            return Transform.rotate(
+                              angle: rotation,
+                              child: Transform.scale(scale: t, child: child),
+                            );
+                          },
+                          child: Container(
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.22),
+                                  blurRadius: 26,
+                                  offset: const Offset(0, 12),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              size: 52,
+                              color: Color(0xFF7C3AED),
+                            ),
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Your eSIM is ready to be Activated.',
-                          style: TextStyle(
-                            color: Color(0xFFDDD6FE), // violet-200
-                            fontSize: 14,
+                        const SizedBox(height: 32),
+                        FadeTransition(
+                          opacity: _textOpacity,
+                          child: SlideTransition(
+                            position: _textOffset,
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Paiement réussi !',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.1,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: 270),
+                                  child: Text(
+                                    isProvisioning
+                                        ? 'Paiement accepté. Préparation de votre eSIM...'
+                                        : 'Votre eSIM est prête à être activée.',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Color(0xFFC4B5FD),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 28),
+                        FadeTransition(
+                          opacity: _cardOpacity,
+                          child: SlideTransition(
+                            position: _cardOffset,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(28),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.24),
+                                    blurRadius: 34,
+                                    offset: const Offset(0, 16),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF3F4F6),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: AspectRatio(
+                                      aspectRatio: 1,
+                                      child: activationCode != null
+                                          ? ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              child: QrImageView(
+                                                data: activationCode,
+                                                version: QrVersions.auto,
+                                                backgroundColor: const Color(
+                                                  0xFFF3F4F6,
+                                                ),
+                                              ),
+                                            )
+                                          : CustomPaint(
+                                              painter: _DashedBorderPainter(
+                                                color: const Color(0xFFD1D5DB),
+                                              ),
+                                              child: const Center(
+                                                child: Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 24,
+                                                      height: 24,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: Color(
+                                                              0xFF9CA3AF,
+                                                            ),
+                                                          ),
+                                                    ),
+                                                    SizedBox(height: 10),
+                                                    Text(
+                                                      'Préparation de l\'eSIM...',
+                                                      style: TextStyle(
+                                                        color: Color(
+                                                          0xFF9CA3AF,
+                                                        ),
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF9FAFB),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFFF3F4F6),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            activationCode ?? 'Préparation...',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Color(0xFF4B5563),
+                                              fontSize: 13,
+                                              fontFamily: 'monospace',
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.08,
+                                                ),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: MotionPressable(
+                                            onTap: activationCode != null
+                                                ? () => _handleCopy(
+                                                    activationCode,
+                                                  )
+                                                : () {},
+                                            child: SizedBox(
+                                              width: 38,
+                                              height: 38,
+                                              child: MotionFadeSlideSwitcher(
+                                                child: Icon(
+                                                  _copied
+                                                      ? Icons.check_rounded
+                                                      : Icons.copy_rounded,
+                                                  key: ValueKey(_copied),
+                                                  color: const Color(
+                                                    0xFF7C3AED,
+                                                  ),
+                                                  size: 19,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Column(
+                                    children: [
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: MotionPressable(
+                                          onTap: () {
+                                            // Navigate to eSIM detail if available
+                                            final esimId =
+                                                esims?.isNotEmpty == true
+                                                ? esims!.first.id
+                                                : null;
+                                            if (esimId != null) {
+                                              context.go(
+                                                RouteNames.esimDetail(esimId.toString()),
+                                              );
+                                            }
+                                          },
+                                          haptic: HapticFeedback.lightImpact,
+                                          child: Container(
+                                            height: 50,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFACC15),
+                                              borderRadius: BorderRadius.circular(14),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.2),
+                                                  blurRadius: 3,
+                                                  offset: const Offset(0, 1),
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.download_rounded, color: Color(0xFF4C1D95)),
+                                                SizedBox(width: 8),
+                                                Text(
+                                                  'Activer l\'eSIM',
+                                                  style: TextStyle(
+                                                    color: Color(0xFF4C1D95),
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: MotionPressable(
+                                          onTap: () => context.go(RouteNames.home),
+                                          haptic: HapticFeedback.lightImpact,
+                                          child: Container(
+                                            height: 50,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                                              borderRadius: BorderRadius.circular(14),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: const Text(
+                                              'Retour à l\'accueil',
+                                              style: TextStyle(
+                                                color: Color(0xFF4B5563),
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 32),
-
-                  // ── QR Code Card (slide up) ───────────────────────
-                  SlideTransition(
-                    position: _cardSlide,
-                    child: FadeTransition(
-                      opacity: _textOpacity,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 380),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                blurRadius: 24,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            children: [
-                              // ── QR area ─────────────────────────
-                              Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF3F4F6), // gray-100
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(0xFFD1D5DB),
-                                    style: BorderStyle.solid,
-                                  ),
-                                ),
-                                child: AspectRatio(
-                                  aspectRatio: 1,
-                                  child: Center(
-                                    child: esim.qrCode != null
-                                        ? Padding(
-                                            padding: const EdgeInsets.all(16),
-                                            child: QrImageView(
-                                              data: esim.qrCode!,
-                                              version: QrVersions.auto,
-                                            ),
-                                          )
-                                        : const Text(
-                                            'QR Code Placeholder',
-                                            style: TextStyle(
-                                              color: Color(0xFF9CA3AF),
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 16),
-
-                              // ── Activation code row ──────────────
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF9FAFB), // gray-50
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: const Color(0xFFF3F4F6)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        esim.qrCode ?? 'N/A',
-                                        style: const TextStyle(
-                                          fontFamily: 'monospace',
-                                          fontSize: 12,
-                                          color: Color(0xFF374151),
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    GestureDetector(
-                                      onTap: _copyCode,
-                                      child: AnimatedSwitcher(
-                                        duration:
-                                            const Duration(milliseconds: 200),
-                                        child: Icon(
-                                          _copied
-                                              ? Icons.check_rounded
-                                              : Icons.copy_rounded,
-                                          key: ValueKey(_copied),
-                                          size: 18,
-                                          color: _copied
-                                              ? const Color(0xFF10B981)
-                                              : const Color(0xFF6B7280),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // ── Activate eSIM button ─────────────
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  // TODO: implement eSIM activation flow
-                                },
-                                icon: const Icon(Icons.download_rounded,
-                                    size: 18),
-                                label: const Text(
-                                  'Activate eSIM',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFACC15),
-                                  foregroundColor: const Color(0xFF3B0764),
-                                  minimumSize: const Size(double.infinity, 48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  elevation: 2,
-                                ),
-                              ),
-
-                              const SizedBox(height: 10),
-
-                              // ── Return Home button ───────────────
-                              OutlinedButton(
-                                onPressed: () => context.go(RouteNames.home),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF4B5563),
-                                  backgroundColor: Colors.white,
-                                  side: const BorderSide(
-                                      color: Color(0xFFE5E7EB)),
-                                  minimumSize: const Size(double.infinity, 48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: const Text('Return Home'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-                ],
+                ),
               ),
             ),
           ],
         ),
       ),
+      ),
     );
   }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+class _BackgroundDecorations extends StatelessWidget {
+  const _BackgroundDecorations();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: const [
+        Positioned(
+          top: 130,
+          left: 24,
+          child: _BlurCircle(size: 240, color: Color(0x808B5CF6)),
+        ),
+        Positioned(
+          bottom: 80,
+          right: -30,
+          child: _BlurCircle(size: 340, color: Color(0x806366F1)),
+        ),
+      ],
+    );
+  }
+}
 
 class _BlurCircle extends StatelessWidget {
   const _BlurCircle({required this.size, required this.color});
@@ -382,13 +513,48 @@ class _BlurCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: 48, sigmaY: 48),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(14),
+    );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    const double dash = 8;
+    const double gap = 7;
+    final path = Path()..addRRect(rect);
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      while (distance < metric.length) {
+        final next = math.min(distance + dash, metric.length);
+        canvas.drawPath(metric.extractPath(distance, next), paint);
+        distance += dash + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }

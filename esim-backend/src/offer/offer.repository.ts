@@ -1,5 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from '../../prisma/prisma.service';
+import type { CreateOfferDto } from './dto/create-offer.dto';
+import type { UpdateOfferDto } from './dto/update-offer.dto';
 
 @Injectable()
 export class OfferRepository {
@@ -10,12 +12,12 @@ export class OfferRepository {
         where: { id, isDeleted: false },
     });
     }
-    async create(transactionData: any) {
+    async create(transactionData: CreateOfferDto) {
         return this.Prisma.offer.create({
             data: transactionData
         });
     }
-    async update(id: number, updateData: any) {
+    async update(id: number, updateData: UpdateOfferDto) {
         return this.Prisma.offer.update({
             where: { id, isDeleted: false },
             data: updateData,

@@ -39,6 +39,23 @@ status?: EsimStatus ;
 event?: EsimEventStatus ;
 @ApiProperty({
   type: 'string',
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+@IsString()
+qrCode?: string  | null;
+@ApiProperty({
+  type: 'string',
+  format: 'date-time',
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+@IsDateString()
+lastUsageSync?: Date  | null;
+@ApiProperty({
+  type: 'string',
   format: 'date-time',
   required: false,
   nullable: true,

@@ -13,30 +13,14 @@ class Transaction {
 
   final int id;
   final int userId;
-  final String status; // PENDING, COMPLETED, FAILED
+  final String status; // PENDING, PROCESSING, SUCCEEDED, FAILED
   final int totalAmount;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<TransactionEsim>? esims;
 
-  factory Transaction.fromJson(Map<String, dynamic> json) => Transaction(
-        id: json['id'] as int,
-        userId: (json['userId'] as int?) ?? 0,
-        status: json['status'] as String,
-        totalAmount: (json['totalAmount'] as num?)?.toInt() ??
-            (json['amount'] as num?)?.toInt() ??
-            0,
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()) ??
-            DateTime.parse(json['createdAt'] as String),
-        esims: (json['esims'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>()
-            .map(TransactionEsim.fromJson)
-            .toList(),
-      );
-
-  String get formattedAmount => '${(totalAmount / 100).toStringAsFixed(2)}€';
+  String get formattedAmount => '${(totalAmount / 1000).toStringAsFixed(3)} TND';
   bool get isPending => status == 'PENDING';
-  bool get isCompleted => status == 'COMPLETED';
+  bool get isCompleted => status == 'SUCCEEDED';
   bool get isFailed => status == 'FAILED';
 }

@@ -42,22 +42,16 @@ export class EsimProcessor extends WorkerHost {
                 ? EsimEventStatus.PROVISIONING_SUCCESS
                 : EsimEventStatus.ACTIVATION_SUCCESS,
             status: EsimStatus.ACTIVE,
-            message: `eSIM activation completed via ${channel}`,
+            message: `Job ${job.name} completed via ${channel}`,
             metadata: job.returnvalue || {},
         });
-        // ✅ update eSIM status to ACTIVE on completion
-        await this.prisma.esim.update({
-            where: { id: transactionId }, // ✅ use transactionId since iccid not known here
-            data: {
-                status: EsimStatus.ACTIVE,
-            },
-        });
-        await this.prisma.walletTransaction.update({
-            where: { transactionId },
-            data: {
-                status: WalletStatus.COMMITTED
-            }
-        })
+
+        if (channel === 'B2B2C') {
+            await this.prisma.walletTransaction.update({
+                where: { transactionId },
+                data: { status: WalletStatus.COMMITTED },
+            });
+        }
     }
     @OnWorkerEvent('failed')
     async onFailed(job: Job, err: Error) {
@@ -90,12 +84,13 @@ export class EsimProcessor extends WorkerHost {
                 where: { id: transactionId },
                 data: { status: 'FAILED' },
             });
-            await this.prisma.walletTransaction.update({
-                where: { transactionId },
-                data: {
-                    status: WalletStatus.RELEASED
-                }
-            })
+
+            if (channel === 'B2B2C') {
+                await this.prisma.walletTransaction.update({
+                    where: { transactionId },
+                    data: { status: WalletStatus.RELEASED },
+                });
+            }
         }
     }
 }

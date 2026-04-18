@@ -1,0 +1,21 @@
+﻿Analyzing esim-frontend...                                      
+
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\offers\presentation\screens\destinations_screen.dart:117:35 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\offers\presentation\screens\destinations_screen.dart:135:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\offers\presentation\screens\destinations_screen.dart:208:46 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\offers\presentation\screens\package_detail_screen.dart:96:54 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\offers\presentation\screens\package_detail_screen.dart:134:45 - deprecated_member_use
+warning - Unused import: 'package:esim_frontend/core/router/route_names.dart' - lib\features\payment\presentation\screens\payment_screen.dart:7:8 - unused_import
+warning - Unused import: 'package:esim_frontend/features/payment/models/purchase_result.dart' - lib\features\payment\presentation\screens\payment_screen.dart:13:8 - unused_import
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\payment\presentation\screens\payment_screen.dart:518:48 - deprecated_member_use
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\features\profile\presentation\screens\settings_screen.dart:87:25 - deprecated_member_use
+
+flutter : 9 issues found. (ran in 2.9s)
+Au caractère Ligne:1 : 1
++ flutter analyze 2>&1 | Out-File -FilePath 
+analyze_output.txt -Encodin ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (9 issues  
+   found. (ran in 2.9s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "prisma/prisma.service";
-import { CreateTransactionDto } from "./dto/create-transaction.dto";
 import { TransactionStatus, Prisma } from "@prisma/client";
 
 @Injectable()
@@ -31,6 +30,21 @@ export class TransactionRepository {
         return this.prisma.transaction.findUnique({
             where: { id: transactionid }
         })
+    }
+
+    async findForUser(userId: number, transactionId: number) {
+        return this.prisma.transaction.findFirst({
+            where: { id: transactionId, userId },
+            include: { esim: true },
+        });
+    }
+
+    async findManyForUser(userId: number) {
+        return this.prisma.transaction.findMany({
+            where: { userId },
+            include: { esim: true },
+            orderBy: { createdAt: 'desc' },
+        });
     }
 
 }

@@ -23,6 +23,6 @@ import { TransactionModule } from '../transaction/transaction.module';
       useClass: MockProviderAdapter,
     },
   ],
-  exports: [EsimService, PROVIDER_ADAPTER],
+  exports: [EsimService, EsimRepository, PROVIDER_ADAPTER],
 })
 export class EsimModule {}

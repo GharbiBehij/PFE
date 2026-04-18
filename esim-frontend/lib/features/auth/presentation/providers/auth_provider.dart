@@ -5,6 +5,7 @@ import 'package:esim_frontend/core/providers/core_providers.dart';
 import 'package:esim_frontend/features/auth/data/auth_datasource.dart';
 import 'package:esim_frontend/features/auth/data/auth_repository.dart';
 import 'package:esim_frontend/features/auth/models/user.dart';
+import 'package:esim_frontend/features/profile/presentation/providers/profile_providers.dart';
 
 // ── Repository provider ────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   Future<void> logout() async {
     await _repo.logout();
+    ref.invalidate(userProfileProvider);
     state = AsyncData(AuthUnauthenticated());
   }
 

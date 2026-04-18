@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
+import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
 import 'package:esim_frontend/features/auth/presentation/providers/auth_provider.dart';
 
@@ -87,40 +89,44 @@ class _LoginFormState extends ConsumerState<LoginForm> {
         // Forgot password
         Align(
           alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: isLoading ? null : () {},
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              'Mot de passe oublié ?',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+          child: MotionPressable(
+            onTap: isLoading ? () {} : () {},
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Text(
+                'Mot de passe oublié ?',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(height: 24),
 
-        // Submit button
-        SizedBox(
-          height: 52,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.secondary,
-              foregroundColor: const Color(0xFF111827),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 3,
-              shadowColor: AppColors.secondary.withValues(alpha: 0.4),
-              disabledBackgroundColor: AppColors.secondary.withValues(alpha: 0.6),
+        MotionPressable(
+          onTap: isLoading ? () {} : _submit,
+          haptic: HapticFeedback.lightImpact,
+          child: Container(
+            height: 52,
+            decoration: BoxDecoration(
+              color: isLoading
+                  ? AppColors.secondary.withValues(alpha: 0.6)
+                  : AppColors.secondary,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: isLoading
+                  ? []
+                  : [
+                      BoxShadow(
+                        color: AppColors.secondary.withValues(alpha: 0.4),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
             ),
-            onPressed: isLoading ? null : _submit,
+            alignment: Alignment.center,
             child: isLoading
                 ? const SizedBox(
                     height: 22,
@@ -136,12 +142,14 @@ class _LoginFormState extends ConsumerState<LoginForm> {
                       Text(
                         'Se connecter',
                         style: TextStyle(
+                          color: Color(0xFF111827),
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
                       ),
                       SizedBox(width: 8),
-                      Icon(Icons.arrow_forward_rounded, size: 18),
+                      Icon(Icons.arrow_forward_rounded,
+                          size: 18, color: Color(0xFF111827)),
                     ],
                   ),
           ),

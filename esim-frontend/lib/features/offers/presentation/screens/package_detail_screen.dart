@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter/services.dart';
+
+import 'package:esim_frontend/core/motion/app_hero.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_page_enter.dart';
+import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
 import 'package:esim_frontend/core/router/route_names.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
 import 'package:esim_frontend/core/widgets/empty_state.dart';
@@ -27,13 +32,50 @@ class PackageDetailScreen extends ConsumerWidget {
     final offerAsync = ref.watch(offerDetailProvider(id));
 
     return Scaffold(
-      body: offerAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const EmptyState(
-          message: 'Forfait introuvable',
-          icon: Icons.error_outline,
+      body: MotionPageEnter(
+        child: offerAsync.when(
+          loading: () => _buildLoadingHero(context, id),
+          error: (_, _) => const EmptyState(
+            message: 'Forfait introuvable',
+            icon: Icons.error_outline,
+          ),
+          data: (offer) => _buildDetail(context, offer),
         ),
-        data: (offer) => _buildDetail(context, offer),
+      ),
+    );
+  }
+
+  Widget _buildLoadingHero(BuildContext context, int id) {
+    final top = MediaQuery.of(context).padding.top;
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.only(top: top + 56),
+        child: Column(
+          children: [
+            packageCardHero(
+              packageId: id,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  height: 260,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7C3AED), Color(0xFF4338CA)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -81,91 +123,101 @@ class PackageDetailScreen extends ConsumerWidget {
               ),
 
               // ── Main card ────────────────────────────────────────────────
-              Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF7C3AED), Color(0xFF4338CA)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF7C3AED).withOpacity(0.4),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('🌐', style: TextStyle(fontSize: 20)),
-                        const SizedBox(width: 8),
-                        Text(
-                          offer.country.toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFFDDD6FE),
-                            fontSize: 13,
-                            letterSpacing: 1.5,
-                            fontWeight: FontWeight.w600,
-                          ),
+              packageCardHero(
+                packageId: offer.id,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF7C3AED), Color(0xFF4338CA)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF7C3AED).withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      offer.formattedData,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        offer.formattedValidity,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 13),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(color: Colors.white24),
-                    const SizedBox(height: 16),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            const Text('🌐', style: TextStyle(fontSize: 20)),
+                            const SizedBox(width: 8),
+                            Text(
+                              offer.country.toUpperCase(),
+                              style: const TextStyle(
+                                color: Color(0xFFDDD6FE),
+                                fontSize: 13,
+                                letterSpacing: 1.2,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
                         Text(
-                          offer.formattedPrice,
+                          offer.formattedData,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 30,
+                            fontSize: 36,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${((offer.price * 1.2) / 100).toStringAsFixed(0)}€',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 16,
-                            decoration: TextDecoration.lineThrough,
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
                           ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            offer.formattedValidity,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(color: Colors.white24),
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              offer.formattedPrice,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 30,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${((offer.price * 1.2) / 100).toStringAsFixed(0)}€',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 16,
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
 
@@ -201,8 +253,11 @@ class PackageDetailScreen extends ConsumerWidget {
                                 color: Color(0xFF10B981),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.check,
-                                  color: Colors.white, size: 14),
+                              child: const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 14,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Text(
@@ -224,15 +279,17 @@ class PackageDetailScreen extends ConsumerWidget {
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEFCE8),
-                        border:
-                            Border.all(color: const Color(0xFFFDE68A)),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.verified_user_outlined,
-                              color: Color(0xFFCA8A04), size: 20),
+                          const Icon(
+                            Icons.verified_user_outlined,
+                            color: Color(0xFFCA8A04),
+                            size: 20,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -275,20 +332,41 @@ class PackageDetailScreen extends ConsumerWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () =>
-                        context.push(RouteNames.payment(packageId)),
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text(
-                      'Continuer vers le paiement',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.secondary,
-                      foregroundColor: AppColors.textPrimary,
-                      minimumSize: const Size(double.infinity, 52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                  child: MotionPressable(
+                    onTap: () => context.push(RouteNames.payment(packageId)),
+                    haptic: HapticFeedback.lightImpact,
+                    child: Container(
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.secondary.withValues(alpha: 0.30),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Continuer vers le paiement',
+                            style: TextStyle(
+                              color: AppColors.textDark,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: AppColors.textDark,
+                            size: 20,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -296,17 +374,19 @@ class PackageDetailScreen extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     offer.formattedPrice,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
                     ),
                   ),
                 ),

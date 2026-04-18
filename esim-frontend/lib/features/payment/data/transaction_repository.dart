@@ -1,3 +1,4 @@
+import 'package:esim_frontend/features/payment/data/dto/transaction_dto.dart';
 import 'package:esim_frontend/features/payment/data/transaction_datasource.dart';
 import 'package:esim_frontend/features/payment/models/transaction.dart';
 
@@ -8,7 +9,7 @@ class TransactionRepository {
 
   Future<List<Transaction>> getUserTransactions() async {
     final raw = await _datasource.getUserTransactions();
-    return raw.map(Transaction.fromJson).toList();
+    return raw.map((j) => TransactionDto.fromJson(j).toDomain()).toList();
   }
 
   Future<Transaction> getTransactionDetail(int id) async {
@@ -19,11 +20,7 @@ class TransactionRepository {
     final esims = (raw['esims'] as List<dynamic>? ?? <dynamic>[])
         .cast<Map<String, dynamic>>();
 
-    final merged = <String, dynamic>{
-      ...transactionMap,
-      'esims': esims,
-    };
-
-    return Transaction.fromJson(merged);
+    final merged = <String, dynamic>{...transactionMap, 'esims': esims};
+    return TransactionDto.fromJson(merged).toDomain();
   }
 }

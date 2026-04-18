@@ -1,0 +1,133 @@
+{
+  "tokens": {
+    "colors": {
+      "primary": "#7C3AED",
+      "primaryLight": "#8B5CF6",
+      "primaryDark": "#6D28D9",
+      "primaryBg": "#F5F3FF",
+      "primaryContainer": "#EDE9FE",
+      "secondary": "#FACC15",
+      "secondaryDark": "#FBBF24",
+      "background": "#FAFAFA",
+      "surface": "#FFFFFF",
+      "surfaceMuted": "#F3F4F6",
+      "divider": "#E5E7EB",
+      "border": "#E5E7EB",
+      "textPrimary": "#111827",
+      "textSecondary": "#6B7280",
+      "textTertiary": "#9CA3AF",
+      "textOnPrimary": "#FFFFFF",
+      "error": "#EF4444",
+      "success": "#10B981",
+      "warning": "#F59E0B"
+    },
+    "spacing": {
+      "xs": 4,
+      "sm": 8,
+      "md": 12,
+      "lg": 16,
+      "xl": 24,
+      "xxl": 32,
+      "xxxl": 48
+    },
+    "radii": {
+      "card": 24,
+      "button": 16,
+      "input": 12,
+      "badge": 8
+    },
+    "typography": {
+      "titleXL": { "fontSize": 32, "fontWeight": 700, "lineHeight": 38 },
+      "titleLG": { "fontSize": 26, "fontWeight": 700, "lineHeight": 32 },
+      "titleMD": { "fontSize": 22, "fontWeight": 700, "lineHeight": 28 },
+      "titleSM": { "fontSize": 18, "fontWeight": 600, "lineHeight": 24 },
+      "bodyLG": { "fontSize": 16, "fontWeight": 400, "lineHeight": 24 },
+      "bodyMD": { "fontSize": 14, "fontWeight": 400, "lineHeight": 20 },
+      "bodySM": { "fontSize": 12, "fontWeight": 400, "lineHeight": 18 },
+      "label": { "fontSize": 14, "fontWeight": 600, "lineHeight": 18 }
+    },
+    "shadows": {
+      "low": {
+        "shadowOffset": { "width": 0, "height": 1 },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 4,
+        "elevation": 1
+      },
+      "medium": {
+        "shadowOffset": { "width": 0, "height": 2 },
+        "shadowOpacity": 0.08,
+        "shadowRadius": 8,
+        "elevation": 3
+      },
+      "high": {
+        "shadowOffset": { "width": 0, "height": 4 },
+        "shadowOpacity": 0.12,
+        "shadowRadius": 14,
+        "elevation": 6
+      }
+    }
+  },
+  "patterns": {
+    "screenBackground": "background",
+    "headerShell": {
+      "gradient": ["surface", "primaryBg"],
+      "shadow": "medium",
+      "borderBottomRadius": [24, 32]
+    },
+    "card": {
+      "background": "surface",
+      "borderColor": "border",
+      "radius": [16, 24],
+      "shadow": ["low", "medium"]
+    },
+    "stickyFooter": {
+      "position": "absoluteBottom",
+      "background": "surface",
+      "shadow": "high",
+      "topBorder": "border"
+    },
+    "bottomNav": {
+      "radiusTop": 24,
+      "height": 82,
+      "background": "surface",
+      "topBorder": "divider",
+      "shadow": { "offsetY": -4, "opacity": 0.05, "radius": 6 }
+    }
+  },
+  "interaction": {
+    "pressed": {
+      "scale": 0.98,
+      "neutralBackground": "surfaceMuted",
+      "shadow": "low"
+    },
+    "secondaryCtaPressed": {
+      "background": "secondaryDark",
+      "scale": 0.98
+    },
+    "activeState": {
+      "background": "primaryContainer",
+      "accent": "primary"
+    }
+  },
+  "motion": {
+    "smallToggle": { "enterMs": 140, "exitMs": 120 },
+    "listReveal": { "type": "FadeInDown", "durationMs": 280, "staggerMs": 50 }
+  },
+  "constraints": [
+    "Do not change logic/state/navigation for visual refactors",
+    "Prefer tokens from src/theme over hardcoded values",
+    "Keep bottom conversion actions in sticky footer"
+  ],
+  "references": [
+    "src/theme/colors.ts",
+    "src/theme/spacing.ts",
+    "src/theme/typography.ts",
+    "src/theme/shadows.ts",
+    "src/screens/home/HomeScreen.tsx",
+    "src/screens/esims/MyEsimsScreen.tsx",
+    "src/screens/offers/PackageDetailScreen.tsx",
+    "src/screens/payment/PaymentScreen.tsx",
+    "src/navigation/MainTabs.tsx",
+    "src/components/CoverageFilterChips.tsx"
+  ]
+}

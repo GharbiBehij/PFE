@@ -1,3 +1,5 @@
+import 'package:esim_frontend/features/wallet/data/dto/wallet_balance_dto.dart';
+import 'package:esim_frontend/features/wallet/data/dto/wallet_ledger_entry_dto.dart';
 import 'package:esim_frontend/features/wallet/data/wallet_datasource.dart';
 import 'package:esim_frontend/features/wallet/models/wallet_balance.dart';
 import 'package:esim_frontend/features/wallet/models/wallet_ledger_entry.dart';
@@ -9,16 +11,17 @@ class WalletRepository {
 
   Future<WalletBalance> getBalance() async {
     final raw = await _datasource.getBalance();
-    return WalletBalance.fromJson(raw);
+    return WalletBalanceDto.fromJson(raw).toDomain();
   }
 
   Future<List<WalletLedgerEntry>> getHistory() async {
     final raw = await _datasource.getHistory();
-    return raw.map(WalletLedgerEntry.fromJson).toList();
+    return raw.map((j) => WalletLedgerEntryDto.fromJson(j).toDomain()).toList();
   }
 
   Future<WalletBalance> topUp(int amount) async {
-    final raw = await _datasource.topUp(amount);
-    return WalletBalance.fromJson(raw);
+    await _datasource.topUp(amount);
+    final raw = await _datasource.getBalance();
+    return WalletBalanceDto.fromJson(raw).toDomain();
   }
 }

@@ -97,7 +97,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
           balanceAsync.when(
             data: (b) => _BalanceSmallCard(balance: b),
             loading: () => const _BalanceSmallCard(balance: WalletBalance(balance: 0)),
-            error: (_, __) => const _BalanceSmallCard(balance: WalletBalance(balance: 0)),
+            error: (_, _) => const _BalanceSmallCard(balance: WalletBalance(balance: 0)),
           ),
           const SizedBox(height: 16),
           const Text(

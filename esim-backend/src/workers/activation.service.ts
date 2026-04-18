@@ -5,11 +5,14 @@ import { PrismaService } from 'prisma/prisma.service';
 import { EsimAuditLogService } from 'src/ProvisionningEvent/EsimAuditLog.service';
 import { RetryableError, TerminalError } from './errors';
 import { ActivateJobData } from 'src/Queue/Interfaces/Queue.interfaces';
-import { EsimEventStatus, EsimStatus } from '@prisma/client';
+import { ActivationAttemptStatus, EsimEventStatus, EsimStatus } from '@prisma/client';
 import { ProviderAdapter } from '../esim/interfaces/provider-adapter.interface';
 import { PROVIDER_ADAPTER } from '../esim/adapters/provider-adapter.token';
 import { WalletService } from '../WalletTransaction/wallet.service';
+import { EsimRepository } from '../esim/esim.repository';
 import { Job } from 'bullmq';
+
+const IN_FLIGHT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 @Injectable()
 export class ActivationService {
@@ -18,7 +21,8 @@ export class ActivationService {
     @Inject(PROVIDER_ADAPTER) private readonly providerAdapter: ProviderAdapter,
     private readonly esimAuditLogService: EsimAuditLogService,
     private readonly walletService: WalletService,
-  ) { }
+    private readonly esimRepository: EsimRepository,
+  ) {}
 
   async handleActivation(job: Job<ActivateJobData>) {
     const { transactionId, userId, channel } = job.data;
@@ -63,25 +67,66 @@ export class ActivationService {
     }
 
     // If already ACTIVE, nothing to do (duplicate job delivery)
-    if (esim.status === EsimStatus.ACTIVE)
-      return;
+    if (esim.status === EsimStatus.ACTIVE) return;
 
     // ──────────────────────────────────────────────────────────────
-    // 3. POLL PROVIDER FOR STATUS (no eSIM creation here)
+    // 3. CREATE ACTIVATION ATTEMPT
+    //    Check in-flight + create atomically to prevent races
     // ──────────────────────────────────────────────────────────────
 
-    await this.esimAuditLogService.log({
-      transactionId,
-      userId,
-      event: EsimEventStatus.ACTIVATION_REQUESTED,
-      status: EsimStatus.NOT_ACTIVE,
-      message: `Checking provider status for eSIM ${esim.iccid} via ${channel}`,
-    });
+    let attempt: any;
+    try {
+      attempt = await this.prisma.$transaction(async (prismaTx) => {
+        const inFlight = await prismaTx.activationAttempt.findFirst({
+          where: {
+            esimId: esim.id,
+            status: ActivationAttemptStatus.STARTED,
+            startedAt: { gte: new Date(Date.now() - IN_FLIGHT_WINDOW_MS) },
+          },
+        });
+
+        if (inFlight) {
+          throw new Error('IN_FLIGHT');
+        }
+
+        const attemptNumber = await this.getNextAttemptNumber(esim.id, prismaTx);
+        const providerRequestId = `${esim.id}-${attemptNumber}`;
+
+        return prismaTx.activationAttempt.create({
+          data: {
+            esimId: esim.id,
+            attemptNumber,
+            status: ActivationAttemptStatus.STARTED,
+            providerRequestId,
+            startedAt: new Date(),
+          },
+        });
+      });
+    } catch (err: any) {
+      if (err.message === 'IN_FLIGHT') {
+        throw new RetryableError('In-flight activation attempt detected — will retry after cooldown');
+      }
+      throw new RetryableError(`DB error creating activation attempt: ${err.message}`);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 4. POLL PROVIDER FOR STATUS (outside transaction)
+    // ──────────────────────────────────────────────────────────────
 
     let providerStatus: { status: 'SUCCESS' | 'FAILED' | 'PENDING'; message?: string };
     try {
       providerStatus = await this.providerAdapter.getStatus(esim.iccid);
     } catch (err: any) {
+      await this.prisma.activationAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: ActivationAttemptStatus.FAILED,
+          completedAt: new Date(),
+          errorCode: err.code ?? 'PROVIDER_ERROR',
+          errorMessage: err.message,
+        },
+      });
+
       if (isInfraError(err)) {
         throw new RetryableError(`Provider unreachable: ${err.message}`);
       }
@@ -89,11 +134,20 @@ export class ActivationService {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // 4. ACT ON PROVIDER STATUS
+    // 5. ACT ON PROVIDER STATUS
     // ──────────────────────────────────────────────────────────────
 
     if (providerStatus.status === 'PENDING') {
-      // Provider is still processing — re-queue via retry
+      // Provider still processing — mark attempt as timed out and retry
+      await this.prisma.activationAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: ActivationAttemptStatus.TIMED_OUT,
+          completedAt: new Date(),
+          errorMessage: providerStatus.message ?? 'Provider still processing',
+        },
+      });
+
       throw new RetryableError(`Provider still processing eSIM ${esim.iccid} — will retry`);
     }
 
@@ -104,16 +158,19 @@ export class ActivationService {
       }
 
       await this.prisma.$transaction(async (prismaTx) => {
-        await prismaTx.esim.update({
-          where: { id: esim.id },
-          data: {
-            status: EsimStatus.NOT_ACTIVE,
-            event: EsimEventStatus.ACTIVATION_FAILED,
-          },
-        });
+        await this.esimRepository.updateStatusTx(prismaTx, esim.id, EsimStatus.NOT_ACTIVE, EsimEventStatus.ACTIVATION_FAILED);
         await prismaTx.transaction.update({
           where: { id: transactionId },
           data: { status: 'FAILED' },
+        });
+        await prismaTx.activationAttempt.update({
+          where: { id: attempt.id },
+          data: {
+            status: ActivationAttemptStatus.FAILED,
+            completedAt: new Date(),
+            errorCode: 'PROVIDER_FAILED',
+            errorMessage: providerStatus.message,
+          },
         });
       });
 
@@ -130,23 +187,34 @@ export class ActivationService {
 
     // providerStatus.status === 'SUCCESS'
     // ──────────────────────────────────────────────────────────────
-    // 5. COMMIT: mark eSIM active + commit wallet funds + mark transaction succeeded
+    // 6. COMMIT: mark eSIM active + commit wallet funds + mark transaction succeeded
     // ──────────────────────────────────────────────────────────────
 
     try {
       await this.prisma.$transaction(async (prismaTx) => {
+        const now = new Date();
+        await this.esimRepository.updateStatusTx(prismaTx, esim.id, EsimStatus.ACTIVE, EsimEventStatus.ACTIVATION_SUCCESS);
         await prismaTx.esim.update({
           where: { id: esim.id },
           data: {
-            status: EsimStatus.ACTIVE,
-            event: EsimEventStatus.ACTIVATION_SUCCESS,
-            activatedAt: new Date(),
+            activatedAt: now,
+            dataTotal: tx.offer.dataVolume,
+            dataUsed: 0,
+            lastUsageSync: now,
+            expiryDate: new Date(now.getTime() + tx.offer.validityDays * 24 * 60 * 60 * 1000),
           },
         });
-
         await prismaTx.transaction.update({
           where: { id: transactionId },
           data: { status: 'SUCCEEDED' },
+        });
+        await prismaTx.activationAttempt.update({
+          where: { id: attempt.id },
+          data: {
+            status: ActivationAttemptStatus.SUCCESS,
+            completedAt: now,
+            providerResponse: providerStatus as any,
+          },
         });
       });
     } catch (err: any) {
@@ -165,6 +233,12 @@ export class ActivationService {
       status: EsimStatus.ACTIVE,
       message: `eSIM ${esim.iccid} successfully activated`,
     });
+  }
+
+  private async getNextAttemptNumber(esimId: number, tx?: any): Promise<number> {
+    const client = tx ?? this.prisma;
+    const count = await client.activationAttempt.count({ where: { esimId } });
+    return count + 1;
   }
 }
 
