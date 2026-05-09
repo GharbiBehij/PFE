@@ -2,16 +2,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-generator nestjsDto {
-  provider            = "prisma-generator-nestjs-dto"
-  output              = "../src/Esim/Dto"
-  classValidation     = "true"
-  modelNamingStrategy = "pascal"
-  dtoSuffix           = "Dto"
-  createDtoPrefix     = "Create"
-  updateDtoPrefix     = "Update"
-  deleteDtoPrefix     = "Delete"
-}
 
 datasource db {
   provider = "postgresql"
