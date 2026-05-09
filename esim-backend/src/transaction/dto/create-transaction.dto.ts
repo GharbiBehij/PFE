@@ -21,7 +21,11 @@ export class CreateTransactionDto {
   @ApiProperty({ example: 42 })
   userId: number;
 
-  @ApiProperty({ enum: TransactionStatus, enumName: 'TransactionStatus', example: TransactionStatus.PENDING })
+  @ApiProperty({
+    enum: TransactionStatus,
+    enumName: 'TransactionStatus',
+    example: TransactionStatus.PENDING,
+  })
   @IsEnum(TransactionStatus)
   @IsOptional()
   status: TransactionStatus;
@@ -29,7 +33,10 @@ export class CreateTransactionDto {
   @ApiProperty({ example: 101 })
   offerId: number;
 
-  @ApiProperty({ example: 1800, description: 'Transaction amount in minor units' })
+  @ApiProperty({
+    example: 1800,
+    description: 'Transaction amount in minor units',
+  })
   amount: number;
 
   @ApiProperty({ example: 'TND' })

@@ -39,13 +39,24 @@ const COOKIE_OPTIONS = {
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
-  @ApiResponse({ status: 200, description: 'Login successful', type: AuthResponseDto })
-  @ApiResponse({ status: 401, description: 'Invalid credentials', type: ErrorResponseDto })
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful',
+    type: AuthResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid credentials',
+    type: ErrorResponseDto,
+  })
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.login(dto);
     res.cookie('refresh_token', result.refresh_token, COOKIE_OPTIONS);
     return {
@@ -57,9 +68,20 @@ export class AuthController {
 
   @Post('signup')
   @ApiOperation({ summary: 'Create a new user account' })
-  @ApiResponse({ status: 201, description: 'User created', type: AuthResponseDto })
-  @ApiResponse({ status: 409, description: 'Email already used', type: ErrorResponseDto })
-  async signup(@Body() dto: SignupDto, @Res({ passthrough: true }) res: Response) {
+  @ApiResponse({
+    status: 201,
+    description: 'User created',
+    type: AuthResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Email already used',
+    type: ErrorResponseDto,
+  })
+  async signup(
+    @Body() dto: SignupDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.signup(dto);
     res.cookie('refresh_token', result.refresh_token, COOKIE_OPTIONS);
     return {
@@ -74,7 +96,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Get currently authenticated user' })
   @ApiBearerAuth('access-token')
   @ApiResponse({ status: 200, type: AuthUserResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   async getMe(@Req() req: Request) {
     const userId = (req.user as any).userId;
     return this.authService.getMe(userId);
@@ -85,7 +111,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout user and clear refresh token cookie' })
   @ApiBearerAuth('access-token')
   @ApiResponse({ status: 201, type: LogoutResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const userId = (req.user as any).userId;
     res.clearCookie('refresh_token');
@@ -93,7 +123,9 @@ export class AuthController {
   }
 
   @Post('refresh')
-  @ApiOperation({ summary: 'Refresh access token using refresh token (body or cookie)' })
+  @ApiOperation({
+    summary: 'Refresh access token using refresh token (body or cookie)',
+  })
   @ApiCookieAuth('refresh-token')
   @ApiBody({
     schema: {
@@ -107,7 +139,11 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 201, type: RefreshResponseDto })
-  @ApiResponse({ status: 401, description: 'Invalid or missing refresh token', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid or missing refresh token',
+    type: ErrorResponseDto,
+  })
   async refresh(
     @Req() req: Request,
     @Body() body: { refreshToken?: string },

@@ -1,25 +1,21 @@
-
-import { Prisma, EsimEventStatus } from '@prisma/client'
-import {ApiProperty} from '@nestjs/swagger'
-import {IsEnum,IsOptional} from 'class-validator'
-
-
-
+import { Prisma, SystemEvent } from '@prisma/client';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsOptional } from 'class-validator';
 
 export class UpdateProvisioningEventDto {
   @ApiProperty({
-  enum: EsimEventStatus,
-  enumName: 'EsimEventStatus',
-  required: false,
-})
-@IsOptional()
-@IsEnum(EsimEventStatus)
-type?: EsimEventStatus ;
-@ApiProperty({
-  type: () => Object,
-  required: false,
-  nullable: true,
-})
-@IsOptional()
-metadata?: Prisma.InputJsonValue  | Prisma.NullableJsonNullValueInput;
+    enum: SystemEvent,
+    enumName: 'SystemEvent',
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(SystemEvent)
+  type?: SystemEvent;
+  @ApiProperty({
+    type: () => Object,
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  metadata?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
 }

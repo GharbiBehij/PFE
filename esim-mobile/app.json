@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "esim-mobile",
+    "scheme": "netyfly",
     "slug": "esim-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,6 +22,22 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "netyfly",
+              "host": "payment"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -28,7 +45,15 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-media-library",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.esimmobile.app",
+          "enableGooglePay": false
+        }
+      ]
     ]
   }
 }

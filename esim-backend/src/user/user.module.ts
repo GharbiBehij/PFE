@@ -5,21 +5,24 @@ import { userRepository } from './user.repository';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EsimPurchaseOrchestrator } from 'src/Orchestrators/EsimPurchaseOrchestrator';
 import { TransactionModule } from '../transaction/transaction.module';
-import { EsimQueueModule } from '../Queue/esim-queue.module';
+import { EsimQueueModule } from '../Queue/module/esim-queue.module';
 import { PaymentModule } from '../payment/payment.module';
-import { ProvisioningModule } from '../ProvisionningEvent/EsimAuditLog.module';
-import { WalletModule } from '../WalletTransaction/wallet.module';
+import { ProvisioningModule } from '../ProvisionningEvent/AuditLog.module';
 
 @Module({
   imports: [
     forwardRef(() => TransactionModule),
     EsimQueueModule,
-    PaymentModule,
+    forwardRef(() => PaymentModule),
     ProvisioningModule,
-    WalletModule,
   ],
   controllers: [userController],
-  providers: [userService, userRepository, PrismaService, EsimPurchaseOrchestrator],
+  providers: [
+    userService,
+    userRepository,
+    PrismaService,
+    EsimPurchaseOrchestrator,
+  ],
   exports: [userService, EsimPurchaseOrchestrator],
 })
 export class UserModule {}

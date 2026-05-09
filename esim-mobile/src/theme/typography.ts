@@ -52,6 +52,11 @@ export const typography = {
     fontWeight: '400' as const,
     lineHeight: 18,
   },
+  bodyXS: {
+    fontSize: 10,
+    fontWeight: '400' as const,
+    lineHeight: 16,
+  },
 
   // Labels & Captions
   labelLG: {

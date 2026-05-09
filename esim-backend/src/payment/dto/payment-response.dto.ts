@@ -10,6 +10,8 @@ export class PaymentResponseDto {
   @ApiPropertyOptional({ example: false })
   retryable?: boolean;
 
-  @ApiPropertyOptional({ example: 'Card declined (insufficient funds or fraud).' })
+  @ApiPropertyOptional({
+    example: 'Card declined (insufficient funds or fraud).',
+  })
   error?: string;
 }

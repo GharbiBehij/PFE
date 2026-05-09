@@ -6,9 +6,10 @@ import {Esim} from './esim.entity'
 
 export class ActivationAttempt {
   @ApiProperty({
-  type: 'string',
+  type: 'integer',
+  format: 'int32',
 })
-id: string ;
+id: number ;
 @ApiProperty({
   type: 'integer',
   format: 'int32',

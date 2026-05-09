@@ -1,110 +1,103 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Transaction } from '@prisma/client';
 import { PaymentRepository } from './payment.repository';
 import { TransactionService } from '../transaction/transaction.service';
-import { EsimAuditLogService } from '../ProvisionningEvent/EsimAuditLog.service';
-import { TransactionStatus } from '@prisma/client';
-import { CreatePaymentDto } from 'src/payment/dto/create-payment.dto';
-
-export interface PaymentResponse {
-  success: boolean;
-  paymentId?: string;
-  retryable?: boolean;
-  error?: string;
-}
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     private readonly paymentRepository: PaymentRepository,
     private readonly transactionService: TransactionService,
-    private readonly EsimAuditLogService: EsimAuditLogService,
-  ) { }
+  ) {}
 
-  async initiatePayment(dto: CreatePaymentDto, transactionId: number): Promise<PaymentResponse> {
-    const providerResponse = this.simulateProviderCall();
-    const paymentStatus = providerResponse.success ? 'SUCCESS' : 'FAILED';
-
-    await this.paymentRepository.initiatePayment({
-      transactionId,
-      userId: dto.userId || 1, // Optional rollback context
-      amount: dto.amount || 100,
-      paymentProvider: 'MOCK_STRIPE',//later switched with the real provider 
-      providerRefId: providerResponse.paymentId || 'failed_tx_' + Date.now(),
-      status: paymentStatus,
-      rawResponse: providerResponse as any,
-    });
-
-    return providerResponse;
+  async initiatePayment(transaction: Transaction): Promise<{
+    gatewayOrderId: string;
+    paymentUrl: string;
+  }> {
+    try {
+      const result = await this.paymentRepository.initiatePayment(transaction);
+      this.logger.log(
+        `Payment initiated for tx ${transaction.id}: gateway=${result.gatewayOrderId}`,
+      );
+      
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`initiatePayment failed for txId=${transaction.id}: ${message}`);
+      throw error;
+    }
   }
 
-  async initiatePaymentTx(tx: any, dto: CreatePaymentDto, transactionId: number): Promise<PaymentResponse> {
-    const providerResponse = this.simulateProviderCall();
-    const paymentStatus = providerResponse.success ? 'SUCCESS' : 'FAILED';
+  async verifyPayment(transactionId: number): Promise<{
+    paid: boolean;
+    status: string;
+    gatewayStatus: number;
+    pan?: string;
+    approvalCode?: string;
+  }> {
+    const transaction = await this.transactionService.findOne(transactionId);
 
-    await this.paymentRepository.initiatePaymentTx(tx, {
+    if (!transaction) {
+      throw new Error(`Transaction ${transactionId} not found`);
+    }
+
+    const payment = await this.paymentRepository.findByTransactionId(transactionId);
+    if (!payment?.gatewayPaymentId) {
+      throw new Error(`Transaction ${transactionId} has no gateway payment ID`);
+    }
+
+    return this.mapVerificationResult(
+      await this.paymentRepository.checkPaymentStatus(payment.gatewayPaymentId),
       transactionId,
-      userId: dto.userId || 1,
-      amount: dto.amount || 100,
-      paymentProvider: 'MOCK_STRIPE',
-      providerRefId: providerResponse.paymentId || 'failed_tx_' + Date.now(),
-      status: paymentStatus,
-      rawResponse: providerResponse as any,
-    });
-
-    return providerResponse;
+    );
   }
 
-  async handlePaymentResult(
+  private mapVerificationResult(
+    result: { status: number; pan?: string; approvalCode?: string },
     transactionId: number,
-    paymentResult: PaymentResponse
-  ): Promise<{ status: 'SUCCESS' | 'FAILED' | 'RETRY' }> {
+  ) {
+    const paid = result.status === 2;
 
-    if (paymentResult.success) {
-      await this.paymentRepository.updatePaymentStatus(transactionId, 'SUCCESS', paymentResult as any);
-      await this.EsimAuditLogService.log('PAYMENT_SUCCESS' as any);
-      return { status: 'SUCCESS' };
+    let statusLabel: string;
+    switch (result.status) {
+      case 0:
+        statusLabel = 'REGISTERED';
+        break;
+      case 1:
+        statusLabel = 'PRE_AUTH';
+        break;
+      case 2:
+        statusLabel = 'DEPOSITED';
+        break;
+      case 3:
+        statusLabel = 'REVERSED';
+        break;
+      case 4:
+        statusLabel = 'REFUNDED';
+        break;
+      case 5:
+        statusLabel = 'ACS_INITIATED';
+        break;
+      case 6:
+        statusLabel = 'DECLINED';
+        break;
+      default:
+        statusLabel = 'UNKNOWN';
+        break;
     }
 
-    if (paymentResult.retryable) {
-      await this.paymentRepository.updatePaymentStatus(transactionId, 'PENDING', paymentResult as any);
-      await this.EsimAuditLogService.log('RETRY_ATTEMPT' as any,);
-      return { status: 'RETRY' };
-    }
+    this.logger.log(
+      `Payment verification for tx ${transactionId}: ClicToPay status=${result.status} (${statusLabel})`,
+    );
 
-    // Failure AND NOT retryable
-    await this.paymentRepository.updatePaymentStatus(transactionId, 'FAILED', paymentResult as any);
-    await this.transactionService.markFailed(transactionId);
-    await this.EsimAuditLogService.log('PAYMENT_FAILED' as any);
-
-    return { status: 'FAILED' };
-  }
-
-  private simulateProviderCall(): PaymentResponse {
-    const rand = Math.random();
-
-    if (rand < 0.7) {
-      return {
-        success: true,
-        paymentId: 'pay_' + Math.random().toString(36).substring(2, 10),
-      };
-    }
-    else if (rand < 0.9) {
-      return {
-        success: false,
-        retryable: true,
-        error: 'Network timeout during payment gateway calling. Please try again.',
-      };
-    }
-    else {
-      return {
-        success: false,
-        retryable: false,
-        error: 'Card declined (insufficient funds or fraud).',
-      };
-    }
-  }
-
-  findAll() {
-    return 'This action returns all payment';
+    return {
+      paid,
+      status: statusLabel,
+      gatewayStatus: result.status,
+      pan: result.pan,
+      approvalCode: result.approvalCode,
+    };
   }
 }

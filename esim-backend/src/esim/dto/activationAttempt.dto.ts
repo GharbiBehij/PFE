@@ -5,9 +5,10 @@ import {ApiProperty} from '@nestjs/swagger'
 
 export class ActivationAttemptDto {
   @ApiProperty({
-  type: 'string',
+  type: 'integer',
+  format: 'int32',
 })
-id: string ;
+id: number ;
 @ApiProperty({
   type: 'integer',
   format: 'int32',

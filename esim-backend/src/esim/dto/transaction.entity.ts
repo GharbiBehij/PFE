@@ -6,7 +6,8 @@ import {Offer} from './offer.entity'
 import {Esim} from './esim.entity'
 import {Payment} from './payment.entity'
 import {WalletTransaction} from './walletTransaction.entity'
-import {EsimAuditLog} from './esimAuditLog.entity'
+import {WalletAttempt} from './walletAttempt.entity'
+import {AuditLog} from './auditLog.entity'
 
 
 export class Transaction {
@@ -83,9 +84,15 @@ payment?: Payment  | null;
 })
 walletTransaction?: WalletTransaction  | null;
 @ApiProperty({
-  type: () => EsimAuditLog,
+  type: () => WalletAttempt,
+  required: false,
+  nullable: true,
+})
+walletAttempt?: WalletAttempt  | null;
+@ApiProperty({
+  type: () => AuditLog,
   isArray: true,
   required: false,
 })
-EsimAuditLog?: EsimAuditLog[] ;
+auditLogs?: AuditLog[] ;
 }

@@ -16,6 +16,14 @@ export class UpdateWalletTransactionDto {
 @IsInt()
 amount?: number ;
 @ApiProperty({
+  type: 'integer',
+  format: 'int32',
+  required: false,
+})
+@IsOptional()
+@IsInt()
+balanceAfter?: number ;
+@ApiProperty({
   type: 'string',
   required: false,
 })
@@ -30,12 +38,4 @@ paymentMethod?: string ;
 @IsOptional()
 @IsEnum(WalletStatus)
 status?: WalletStatus ;
-@ApiProperty({
-  type: 'integer',
-  format: 'int32',
-  required: false,
-})
-@IsOptional()
-@IsInt()
-balanceAfter?: number ;
 }

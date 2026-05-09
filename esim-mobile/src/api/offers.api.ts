@@ -24,6 +24,23 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 const asArray = (value: unknown): Record<string, unknown>[] =>
   Array.isArray(value) ? value.map(asRecord) : [];
 
+const extractArrayPayload = (value: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(value)) {
+    return value.map(asRecord);
+  }
+
+  const record = asRecord(value);
+  if (Array.isArray(record.data)) {
+    return record.data.map(asRecord);
+  }
+
+  if (Array.isArray(record.items)) {
+    return record.items.map(asRecord);
+  }
+
+  return [];
+};
+
 const asString = (value: unknown, fallback = ''): string => {
   if (typeof value === 'string') {
     return value;
@@ -102,7 +119,7 @@ const normalizeOffer = (rawValue: unknown): Offer => {
   }
 
   return {
-    id: asString(raw.id),
+    id: asNumber(raw.id),
     country,
     countryCode,
     dataVolume: normalizeDataVolume(raw.dataVolume),
@@ -112,30 +129,36 @@ const normalizeOffer = (rawValue: unknown): Offer => {
     providerId: asString(raw.providerId),
     description: asString(raw.description) || undefined,
     popularity,
+    networkType: asString(raw.networkType) || undefined,
   };
 };
 
 const normalizeDestination = (rawValue: unknown): Destination => {
   const raw = asRecord(rawValue);
   const country = asString(raw.country);
-  const region = asString(raw.region || raw.Region);
+  const Region = asString(raw.Region || raw.region);
   const startingPrice = asNumber(raw.startingPrice ?? raw.lowestPrice ?? raw.price);
 
   return {
-    id: asString(raw.id, `${country}-${region}`),
+    id: asString(raw.id, `${country}-${Region}`),
     country,
     countryCode: toCountryCode(country, raw.countryCode),
-    region,
-    imageUrl: asString(raw.imageUrl) || undefined,
+    Region,
     startingPrice,
     coverageType: normalizeCoverageType(raw.coverageType),
+    offerCount: typeof raw.offerCount === 'number' ? raw.offerCount : undefined,
+    networkType: asString(raw.networkType) || undefined,
   };
 };
 
 export const offersApi = {
-  getOffers: async (country?: string) => {
+  getOffers: async (country?: string, region?: string, coverageType?: string) => {
+    const params: Record<string, string> = {};
+    if (country) params.country = country;
+    if (region) params.region = region;
+    if (coverageType) params.coverageType = coverageType;
     const response = await apiClient.get<unknown>('/offers', {
-      params: country ? { country } : undefined,
+      params: Object.keys(params).length > 0 ? params : undefined,
     });
     return asArray(response.data).map(normalizeOffer);
   },
@@ -154,7 +177,12 @@ export const offersApi = {
     return asArray(response.data).map(normalizeOffer);
   },
   getDestinations: async () => {
-    const response = await apiClient.get<unknown>('/offers/destinations');
-    return asArray(response.data).map(normalizeDestination);
+    try {
+      const response = await apiClient.get<unknown>('/offers/destinations');
+      return extractArrayPayload(response.data).map(normalizeDestination);
+    } catch {
+      const fallbackResponse = await apiClient.get<unknown>('/esim/destinations');
+      return extractArrayPayload(fallbackResponse.data).map(normalizeDestination);
+    }
   },
 };

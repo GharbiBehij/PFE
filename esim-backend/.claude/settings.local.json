@@ -30,7 +30,20 @@
       "Bash(find C:/Users/Lenovo/Desktop/PFE/esim-backend/src -name \"connect-*.dto.ts\" -delete)",
       "Bash(cmd:*)",
       "Bash(powershell:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(npx jest:*)",
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\('stripe'\\)\")",
+      "Bash(node:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(echo \"TypeScript: $?\")",
+      "Bash(cat eslint.config.*)",
+      "Bash(npx eslint:*)",
+      "Bash(git -C \"/c/Users/Lenovo/Desktop/PFE/esim-backend\" show HEAD:src/payment/adapters/FlouciGateway.ts)",
+      "Bash(git -C \"/c/Users/Lenovo/Desktop/PFE/esim-backend\" log --all --oneline -- src/payment/adapters/FlouciGateway.ts)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

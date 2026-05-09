@@ -15,6 +15,11 @@ id: number ;
 })
 amount: number ;
 @ApiProperty({
+  type: 'integer',
+  format: 'int32',
+})
+balanceAfter: number ;
+@ApiProperty({
   type: 'string',
 })
 paymentMethod: string ;
@@ -23,11 +28,6 @@ paymentMethod: string ;
   enumName: 'WalletStatus',
 })
 status: WalletStatus ;
-@ApiProperty({
-  type: 'integer',
-  format: 'int32',
-})
-balanceAfter: number ;
 @ApiProperty({
   type: 'string',
   format: 'date-time',

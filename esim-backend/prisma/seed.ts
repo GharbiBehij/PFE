@@ -1,380 +1,344 @@
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
+// prisma/seed.ts
 
-const databaseUrl = process.env.DATABASE_URL;
+import { PrismaClient, CoverageType, Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
-if (!databaseUrl) {
-  throw new Error('DATABASE_URL is not set.');
-}
+const prisma = new PrismaClient();
 
-const pool = new Pool({ connectionString: databaseUrl });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+// ── Pricing tables by region ────────────────────────────────────────────────
+// Price in TND · dataVolume in MB
 
-type CountrySeed = {
-  country: string;
-  region: string;
-  destination: string;
+type OfferTier = {
+  validityDays: number;
+  dataVolume: number;  // MB
+  price: number;       // TND
 };
 
-type OfferTemplate = {
-  category: 'TOURIST' | 'BUSINESS' | 'UNLIMITED' | 'STANDARD' | 'PREMIUM' | 'LITE';
-  dataVolume: number;
-  coverageType: 'LOCAL' | 'REGIONAL' | 'GLOBAL';
-  validityDays: number;
-  price: number;
-  margin: number;
+// Base tiers — adjusted per region below
+const europeTiers: OfferTier[] = [
+  { validityDays: 7,  dataVolume: 1024,  price: 5  },
+  { validityDays: 7,  dataVolume: 3072,  price: 9  },
+  { validityDays: 15, dataVolume: 3072,  price: 12 },
+  { validityDays: 15, dataVolume: 5120,  price: 16 },
+  { validityDays: 15, dataVolume: 10240, price: 24 },
+  { validityDays: 30, dataVolume: 5120,  price: 19 },
+  { validityDays: 30, dataVolume: 10240, price: 32 },
+  { validityDays: 30, dataVolume: 20480, price: 49 },
+];
+
+const asiaTiers: OfferTier[] = [
+  { validityDays: 7,  dataVolume: 1024,  price: 6  },
+  { validityDays: 7,  dataVolume: 3072,  price: 11 },
+  { validityDays: 15, dataVolume: 3072,  price: 14 },
+  { validityDays: 15, dataVolume: 5120,  price: 18 },
+  { validityDays: 15, dataVolume: 10240, price: 27 },
+  { validityDays: 30, dataVolume: 5120,  price: 22 },
+  { validityDays: 30, dataVolume: 10240, price: 36 },
+  { validityDays: 30, dataVolume: 20480, price: 55 },
+];
+
+const middleEastTiers: OfferTier[] = [
+  { validityDays: 7,  dataVolume: 1024,  price: 7  },
+  { validityDays: 7,  dataVolume: 3072,  price: 12 },
+  { validityDays: 15, dataVolume: 3072,  price: 16 },
+  { validityDays: 15, dataVolume: 5120,  price: 21 },
+  { validityDays: 15, dataVolume: 10240, price: 30 },
+  { validityDays: 30, dataVolume: 5120,  price: 25 },
+  { validityDays: 30, dataVolume: 10240, price: 40 },
+  { validityDays: 30, dataVolume: 20480, price: 60 },
+];
+
+const northAmericaTiers: OfferTier[] = [
+  { validityDays: 7,  dataVolume: 1024,  price: 8  },
+  { validityDays: 7,  dataVolume: 3072,  price: 13 },
+  { validityDays: 15, dataVolume: 3072,  price: 17 },
+  { validityDays: 15, dataVolume: 5120,  price: 22 },
+  { validityDays: 15, dataVolume: 10240, price: 32 },
+  { validityDays: 30, dataVolume: 5120,  price: 26 },
+  { validityDays: 30, dataVolume: 10240, price: 42 },
+  { validityDays: 30, dataVolume: 20480, price: 65 },
+];
+
+const oceaniaTiers: OfferTier[] = [
+  { validityDays: 7,  dataVolume: 1024,  price: 7  },
+  { validityDays: 7,  dataVolume: 3072,  price: 12 },
+  { validityDays: 15, dataVolume: 3072,  price: 15 },
+  { validityDays: 15, dataVolume: 5120,  price: 20 },
+  { validityDays: 15, dataVolume: 10240, price: 29 },
+  { validityDays: 30, dataVolume: 5120,  price: 24 },
+  { validityDays: 30, dataVolume: 10240, price: 38 },
+  { validityDays: 30, dataVolume: 20480, price: 58 },
+];
+
+const regionalTiers: OfferTier[] = [
+  { validityDays: 7,  dataVolume: 3072,  price: 18 },
+  { validityDays: 7,  dataVolume: 5120,  price: 25 },
+  { validityDays: 15, dataVolume: 5120,  price: 30 },
+  { validityDays: 15, dataVolume: 10240, price: 42 },
+  { validityDays: 15, dataVolume: 20480, price: 58 },
+  { validityDays: 30, dataVolume: 10240, price: 55 },
+  { validityDays: 30, dataVolume: 20480, price: 79 },
+];
+
+const globalTiers: OfferTier[] = [
+  { validityDays: 7,  dataVolume: 3072,  price: 25 },
+  { validityDays: 7,  dataVolume: 5120,  price: 35 },
+  { validityDays: 15, dataVolume: 5120,  price: 42 },
+  { validityDays: 15, dataVolume: 10240, price: 59 },
+  { validityDays: 15, dataVolume: 20480, price: 79 },
+  { validityDays: 30, dataVolume: 10240, price: 75 },
+  { validityDays: 30, dataVolume: 20480, price: 99 },
+];
+
+// ── Countries per region ────────────────────────────────────────────────────
+
+const europeCountries = [
+  'France', 'Allemagne', 'Italie', 'Espagne', 'Grèce',
+  'Portugal', 'Pays-Bas', 'Belgique', 'Suisse', 'Autriche',
+  'Pologne', 'Croatie', 'Tchéquie', 'Hongrie',
+];
+
+const asiaCountries = [
+  'Japon', 'Chine', 'Singapour', 'Thaïlande',
+  'Corée du Sud', 'Inde', 'Indonésie', 'Malaisie',
+];
+
+const middleEastCountries = [
+  'Émirats Arabes', 'Arabie Saoudite',
+];
+
+const northAmericaCountries = [
+  'États-Unis', 'Canada', 'Mexique',
+  'Costa Rica', 'Panama', 'Rép. Dominicaine',
+];
+
+const oceaniaCountries = [
+  'Australie', 'Nouvelle-Zélande',
+];
+
+// ── Build offer records ─────────────────────────────────────────────────────
+
+type OfferCreate = {
+  country: string;
+  Region: string;
+  Destination: string;
+  Category: string;
   title: string;
   description: string;
-  popularity: 'HIGH' | 'MEDIUM' | 'LOW';
+  popularity: string;
+  coverageType: CoverageType;
+  dataVolume: number;
+  validityDays: number;
+  price: number;
+  InternalMargin: number;
+  providerId: number;
+  isDeleted: boolean;
 };
 
-const countries: CountrySeed[] = [
-  // Europe
-  { country: 'France', region: 'Europe', destination: 'Paris' },
-  { country: 'Spain', region: 'Europe', destination: 'Barcelona' },
-  { country: 'Italy', region: 'Europe', destination: 'Rome' },
-  { country: 'Germany', region: 'Europe', destination: 'Berlin' },
-  { country: 'United Kingdom', region: 'Europe', destination: 'London' },
-  { country: 'Greece', region: 'Europe', destination: 'Athens' },
-  { country: 'Portugal', region: 'Europe', destination: 'Lisbon' },
+const buildOffersForCountry = (
+  country: string,
+  region: string,
+  coverageType: CoverageType,
+  tiers: OfferTier[],
+  providerId: number,
+  popularity: 'HIGH' | 'MEDIUM' | 'LOW',
+): OfferCreate[] => {
+  return tiers.map((tier) => {
+    const gbLabel = tier.dataVolume >= 1024
+      ? `${tier.dataVolume / 1024}GB`
+      : `${tier.dataVolume}MB`;
 
-  // Asia / Middle East
-  { country: 'Japan', region: 'Asia', destination: 'Tokyo' },
-  { country: 'Thailand', region: 'Asia', destination: 'Bangkok' },
-  { country: 'Singapore', region: 'Asia', destination: 'Singapore' },
-  { country: 'South Korea', region: 'Asia', destination: 'Seoul' },
-  { country: 'UAE', region: 'Middle East', destination: 'Dubai' },
+    return {
+      country,
+      Region: region,
+      Destination: country,
+      Category:
+        coverageType === CoverageType.LOCAL
+          ? 'Local'
+          : coverageType === CoverageType.REGIONAL
+            ? 'Regional'
+            : 'Global',
+      title: `${country} ${gbLabel} · ${tier.validityDays}j`,
+      description: `Forfait eSIM ${country} — ${gbLabel} de données valable ${tier.validityDays} jours.`,
+      popularity,
+      coverageType,
+      dataVolume: tier.dataVolume,
+      validityDays: tier.validityDays,
+      price: tier.price,
+      InternalMargin: 20,
+      providerId,
+      isDeleted: false,
+    };
+  });
+};
 
-  // Americas
-  { country: 'USA', region: 'North America', destination: 'New York' },
-  { country: 'Canada', region: 'North America', destination: 'Toronto' },
-  { country: 'Mexico', region: 'North America', destination: 'Cancun' },
-
-  // Oceania
-  { country: 'Australia', region: 'Oceania', destination: 'Sydney' },
-];
-
-// Exactly 8 templates so each country gets 8 offers.
-// Price range target: 1500 to 7000 (millimes).
-const offerTemplates: OfferTemplate[] = [
-  {
-    category: 'TOURIST',
-    coverageType: 'LOCAL',
-    dataVolume: 1000,
-    validityDays: 7,
-    price: 1500,
-    margin: 200,
-    title: '1GB Tourist Plan',
-    description: 'Good for maps, chat, and light browsing on short trips.',
-    popularity: 'HIGH',
-  },
-  {
-    category: 'TOURIST',
-    coverageType: 'REGIONAL',
-    dataVolume: 3000,
-    validityDays: 15,
-    price: 2500,
-    margin: 300,
-    title: '3GB Tourist Plan',
-    description: 'Balanced option for typical 1-2 week vacations.',
-    popularity: 'HIGH',
-  },
-  {
-    category: 'TOURIST',
-    coverageType: 'GLOBAL',         
-    dataVolume: 5000,
-    validityDays: 30,
-    price: 3500,
-    margin: 450,
-    title: '5GB Tourist Plan',
-    description: 'Comfortable monthly allowance for frequent travelers.',
-    popularity: 'MEDIUM',
-  },
-  {
-    category: 'BUSINESS',
-    coverageType: 'GLOBAL',
-    dataVolume: 10000,
-    validityDays: 30,
-    price: 4500,
-    margin: 600,
-    title: '10GB Business Plan',
-    description: 'Reliable plan for calls, hotspot, and remote work needs.',
-    popularity: 'HIGH',
-  },
-  {
-    category: 'UNLIMITED',
-    coverageType: 'GLOBAL', 
-    dataVolume: 100000,
-    validityDays: 30,
-    price: 7000,
-    margin: 900,
-    title: 'Unlimited Monthly',
-    description: 'High-cap usage for streaming, uploads, and heavy browsing.',
-    popularity: 'MEDIUM',
-  },
-  {
-    category: 'STANDARD',
-    coverageType: 'REGIONAL',
-    dataVolume: 7000,
-    validityDays: 30,
-    price: 4000,
-    margin: 500,
-    title: '7GB Standard Plan',
-    description: 'Everyday data plan with good value and stable coverage.',
-    popularity: 'HIGH',
-  },
-  {
-    category: 'PREMIUM',
-    coverageType: 'GLOBAL',
-    dataVolume: 20000,
-    validityDays: 30,
-    price: 6000,
-    margin: 800,
-    title: '20GB Premium Plan',
-    description: 'Premium connectivity tier with strong performance.',
-    popularity: 'LOW',
-  },
-  {
-    category: 'LITE',
-    coverageType: 'LOCAL',
-    dataVolume: 500,
-    validityDays: 7,
-    price: 1800,
-    margin: 180,
-    title: '500MB Lite Plan',
-    description: 'Minimum data package for backup and emergency usage.',
-    popularity: 'LOW',
-  },
-];
+// ── Main seed ───────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('Starting seed...');
+  console.log('🌱 Seeding NetyFly database...\n');
 
-  const offerColumns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name IN ('Offer', 'offer')`,
-  );
-  const columnSet = new Set(offerColumns.map((col) => col.column_name));
+  // ── 1. Provider ───────────────────────────────────────────────────────────
 
-  const hasModernOfferColumns =
-    columnSet.has('Region') &&
-    columnSet.has('Destination') &&
-    columnSet.has('Category') &&
-    columnSet.has('InternalMargin');
-
-  const hasLegacyOfferColumns =
-    columnSet.has('region') &&
-    columnSet.has('destination') &&
-    columnSet.has('category') &&
-    columnSet.has('internalMargin');
-
-  const pickColumn = (...candidates: string[]) =>
-    candidates.find((candidate) => columnSet.has(candidate)) ?? null;
-
-  const regionColumn = pickColumn('Region', 'region');
-  const destinationColumn = pickColumn('Destination', 'destination');
-  const categoryColumn = pickColumn('Category', 'category');
-  const internalMarginColumn = pickColumn('InternalMargin', 'internalMargin');
-  const createdAtColumn = pickColumn('createdAt', 'createdat');
-  const updatedAtColumn = pickColumn('updatedAt', 'updatedat');
-
-  const coverageColumnName = columnSet.has('coverageType')
-    ? 'coverageType'
-    : columnSet.has('coveragetype')
-      ? 'coveragetype'
-      : null;
-  const hasCoverageTypeColumn = coverageColumnName !== null;
-
-  if (!hasCoverageTypeColumn) {
-    console.warn(
-      'coverageType column not found in Offer table; seeding without coverageType values.',
-    );
-  }
-
-  console.log('Ensuring provider exists...');
   const provider = await prisma.provider.upsert({
     where: { id: 1 },
-    update: {
-      name: 'GlobaleSIM',
-      apiUrl: 'https://api.example.com',
-      apiKey: 'seed-api-key',
-    },
+    update: {},
     create: {
       id: 1,
-      name: 'GlobaleSIM',
-      apiUrl: 'https://api.example.com',
-      apiKey: 'seed-api-key',
+      name: 'Mock Provider',
+      apiUrl: 'https://mock.provider.netyfly.com',
+      apiKey: 'mock-api-key-for-testing',
     },
   });
-  console.log(`Provider ready: ${provider.name}`);
 
-  console.log('Cleaning existing offers...');
+  console.log(`✓ Provider: ${provider.name} (id=${provider.id})`);
+
+  // ── 2. Users ──────────────────────────────────────────────────────────────
+
+  const hashedPassword = await bcrypt.hash('Test1234!', 10);
+
+  const client = await prisma.user.upsert({
+    where: { email: 'client@netyfly.com' },
+    update: {},
+    create: {
+      firstname: 'Hama',
+      lastname: 'Gharbi',
+      email: 'client@netyfly.com',
+      hashedPassword,
+      role: Role.CLIENT,
+      balance: 0,
+    },
+  });
+
+  const reseller = await prisma.user.upsert({
+    where: { email: 'reseller@netyfly.com' },
+    update: {},
+    create: {
+      firstname: 'Sami',
+      lastname: 'Ben Ali',
+      email: 'reseller@netyfly.com',
+      hashedPassword,
+      role: Role.SALESMAN,
+      balance: 500,
+    },
+  });
+
+  const zoneChief = await prisma.user.upsert({
+    where: { email: 'chief@netyfly.com' },
+    update: {},
+    create: {
+      firstname: 'Zone',
+      lastname: 'Chief',
+      email: 'chief@netyfly.com',
+      hashedPassword,
+      role: Role.ZONE_CHIEF,
+      balance: 0,
+    },
+  });
+
+  console.log(`✓ Users created:`);
+  console.log(`  Client:     ${client.email}`);
+  console.log(`  Reseller:   ${reseller.email}`);
+  console.log(`  Zone Chief: ${zoneChief.email}`);
+
+  // ── 3. Offers — clear and recreate ───────────────────────────────────────
+
+  // Clean slate for offers — safe since no transactions exist yet
   await prisma.offer.deleteMany({});
-  console.log('Existing offers cleared');
+  console.log(`\n✓ Cleared existing offers`);
 
-  console.log('Creating sample offers...');
-  const offersData = countries.flatMap((location) =>
-    offerTemplates.map((template) => ({
-      country: location.country,
-      Region: location.region,
-      Destination: location.destination,
-      Category: template.category,
-      title: `${location.country} - ${template.title}`,
-      description: template.description,
-      popularity: template.popularity,
-      ...(hasCoverageTypeColumn
-        ? { coverageType: template.coverageType }
-        : {}),
-      dataVolume: template.dataVolume,
-      validityDays: template.validityDays,
-      price: template.price,
-      InternalMargin: template.margin,
-      providerId: provider.id,
-      isDeleted: false,
-    })),
+  const allOffers: OfferCreate[] = [];
+
+  // ── LOCAL — 8 tiers per country ──────────────────────────────────────────
+
+  for (const country of europeCountries) {
+    const popularity = ['France', 'Allemagne', 'Italie', 'Espagne', 'Grèce'].includes(country)
+      ? 'HIGH' : 'MEDIUM';
+    allOffers.push(
+      ...buildOffersForCountry(country, 'Europe', CoverageType.LOCAL, europeTiers, provider.id, popularity as any),
+    );
+  }
+
+  for (const country of asiaCountries) {
+    const popularity = ['Japon', 'Singapour', 'Thaïlande'].includes(country)
+      ? 'HIGH' : 'MEDIUM';
+    allOffers.push(
+      ...buildOffersForCountry(country, 'Asia', CoverageType.LOCAL, asiaTiers, provider.id, popularity as any),
+    );
+  }
+
+  for (const country of middleEastCountries) {
+    allOffers.push(
+      ...buildOffersForCountry(country, 'Middle East', CoverageType.LOCAL, middleEastTiers, provider.id, 'HIGH'),
+    );
+  }
+
+  for (const country of northAmericaCountries) {
+    const popularity = ['États-Unis', 'Canada'].includes(country) ? 'HIGH' : 'MEDIUM';
+    allOffers.push(
+      ...buildOffersForCountry(country, 'North America', CoverageType.LOCAL, northAmericaTiers, provider.id, popularity as any),
+    );
+  }
+
+  for (const country of oceaniaCountries) {
+    allOffers.push(
+      ...buildOffersForCountry(country, 'Oceania', CoverageType.LOCAL, oceaniaTiers, provider.id, 'MEDIUM'),
+    );
+  }
+
+  // ── REGIONAL — 7 tiers per region ────────────────────────────────────────
+
+  const regions = [
+    { name: 'Europe',        region: 'Europe' },
+    { name: 'Asia',          region: 'Asia' },
+    { name: 'Middle East',   region: 'Middle East' },
+    { name: 'North America', region: 'North America' },
+    { name: 'Oceania',       region: 'Oceania' },
+  ];
+
+  for (const r of regions) {
+    allOffers.push(
+      ...buildOffersForCountry(r.name, r.region, CoverageType.REGIONAL, regionalTiers, provider.id, 'HIGH'),
+    );
+  }
+
+  // ── GLOBAL — 7 tiers for Mondial ─────────────────────────────────────────
+
+  allOffers.push(
+    ...buildOffersForCountry('Mondial', 'Global', CoverageType.GLOBAL, globalTiers, provider.id, 'HIGH'),
   );
 
-  let createdCount = 0;
-  if (hasModernOfferColumns && hasCoverageTypeColumn) {
-    const created = await prisma.offer.createMany({
-      data: offersData,
-    });
-    createdCount = created.count;
-  } else if (
-    (hasModernOfferColumns || hasLegacyOfferColumns) &&
-    regionColumn &&
-    destinationColumn &&
-    categoryColumn &&
-    internalMarginColumn
-  ) {
-    console.warn(
-      'Offer schema is not fully compatible with Prisma createMany; using raw SQL insert fallback for seed.',
-    );
+  // ── Insert all offers ─────────────────────────────────────────────────────
 
-    for (const location of countries) {
-      for (const template of offerTemplates) {
-        const now = new Date();
-        const columns: string[] = [
-          'country',
-          regionColumn,
-          destinationColumn,
-          categoryColumn,
-          'title',
-          'description',
-          'popularity',
-          'dataVolume',
-          'validityDays',
-          'price',
-          internalMarginColumn,
-          'providerId',
-          'isDeleted',
-        ];
-        const values: Array<string | number | boolean> = [
-          location.country,
-          location.region,
-          location.destination,
-          template.category,
-          `${location.country} - ${template.title}`,
-          template.description,
-          template.popularity,
-          template.dataVolume,
-          template.validityDays,
-          template.price,
-          template.margin,
-          provider.id,
-          false,
-        ];
+  await prisma.offer.createMany({ data: allOffers });
 
-        if (createdAtColumn) {
-          columns.push(createdAtColumn);
-          values.push(now.toISOString());
-        }
+  // ── Summary ───────────────────────────────────────────────────────────────
 
-        if (updatedAtColumn) {
-          columns.push(updatedAtColumn);
-          values.push(now.toISOString());
-        }
+  const localCount    = allOffers.filter((o) => o.coverageType === CoverageType.LOCAL).length;
+  const regionalCount = allOffers.filter((o) => o.coverageType === CoverageType.REGIONAL).length;
+  const globalCount   = allOffers.filter((o) => o.coverageType === CoverageType.GLOBAL).length;
 
-        if (coverageColumnName) {
-          columns.push(coverageColumnName);
-          values.push(template.coverageType);
-        }
+  console.log(`\n✓ Offers created: ${allOffers.length} total`);
+  console.log(`  LOCAL:    ${localCount} offers (${europeCountries.length + asiaCountries.length + middleEastCountries.length + northAmericaCountries.length + oceaniaCountries.length} countries × 8 tiers)`);
+  console.log(`  REGIONAL: ${regionalCount} offers (5 regions × 7 tiers)`);
+  console.log(`  GLOBAL:   ${globalCount} offers (Mondial × 7 tiers)`);
 
-        const quotedColumns = columns.map((col) => `"${col}"`).join(', ');
-        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO "Offer" (${quotedColumns}) VALUES (${placeholders})`,
-          ...values,
-        );
-        createdCount += 1;
-      }
-    }
-  } else {
-    throw new Error(
-      'Unsupported Offer table schema. Expected either modern (Region/Destination/Category/InternalMargin) or legacy lowercase columns.',
-    );
-  }
-
-  console.log(`Created ${createdCount} offers across ${countries.length} countries`);
-
-  console.log('\nSeed summary:');
-  const totalOffers = await prisma.offer.count({
-    where: { isDeleted: false },
-  });
-
-  const totalCountries = await prisma.offer.groupBy({
-    by: ['country'],
-    where: { isDeleted: false },
-  });
-
-  const categories = hasModernOfferColumns
-    ? await prisma.offer.groupBy({
-        by: ['Category'],
-        where: { isDeleted: false },
-        _count: { id: true },
-        orderBy: { Category: 'asc' },
-      })
-    : await prisma.$queryRawUnsafe<Array<{ Category: string; count: number }>>(
-        `SELECT "category" AS "Category", COUNT(*)::int AS "count"
-         FROM "Offer"
-         WHERE "isDeleted" = false
-         GROUP BY "category"
-         ORDER BY "category" ASC`,
-      );
-
-  const minPrice = await prisma.offer.aggregate({
-    where: { isDeleted: false },
-    _min: { price: true },
-  });
-
-  const maxPrice = await prisma.offer.aggregate({
-    where: { isDeleted: false },
-    _max: { price: true },
-  });
-
-  console.log(`  Total offers: ${totalOffers}`);
-  console.log(`  Total countries: ${totalCountries.length}`);
-  console.log(`  Price range (millimes): ${minPrice._min.price ?? 0} -> ${maxPrice._max.price ?? 0}`);
-  console.log('  Categories:');
-  for (const category of categories) {
-    const count = '_count' in category ? category._count.id : category.count;
-    console.log(`    - ${category.Category}: ${count} offers`);
-  }
-
-  console.log('\nSeed completed successfully');
+  console.log(`\n✅ Seed complete!\n`);
+  console.log('Test credentials:');
+  console.log('  Client:     client@netyfly.com   / Test1234!');
+  console.log('  Reseller:   reseller@netyfly.com / Test1234!');
+  console.log('  Zone Chief: chief@netyfly.com    / Test1234!');
+  console.log('\nOffer tiers per destination:');
+  console.log('  7 days:  1GB (5 TND), 3GB (9 TND)');
+  console.log('  15 days: 3GB (12 TND), 5GB (16 TND), 10GB (24 TND)');
+  console.log('  30 days: 5GB (19 TND), 10GB (32 TND), 20GB (49 TND)');
+  console.log('  (Europe pricing — other regions vary slightly higher)');
 }
 
 main()
-  .catch((error) => {
-    console.error('Seed failed:', error);
+  .catch((e) => {
+    console.error('❌ Seed failed:', e);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
-    await pool.end();
   });

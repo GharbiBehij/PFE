@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { DestinationCard } from '../../components/DestinationCard';
+import { DestinationCard } from '../../components/Cards/DestinationCard';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { Group, ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
-import { useDestinations } from '../../hooks/useOffers';
+import { useDestinations } from '../../hooks/client/useOffers';
 import type { HomeStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, spacing, typography } from '../../theme';
 import type { Destination } from '../../types/offer';

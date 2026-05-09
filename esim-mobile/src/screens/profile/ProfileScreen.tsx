@@ -3,7 +3,8 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/client/useAuth';
+import { navigateTo } from '../../navigation/navigationRef';
 import type { ProfileStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
 
@@ -12,6 +13,54 @@ type Props = NativeStackScreenProps<ProfileStackParamList, 'Profile'>;
 export const ProfileScreen = ({ navigation }: Props) => {
   const { user, logout } = useAuth();
   const tabBarHeight = useBottomTabBarHeight();
+
+  if (!user) {
+    return (
+      <ScreenShell>
+        <ScreenHeader style={styles.header}>
+          <Text style={styles.headerTitle}>Profil</Text>
+        </ScreenHeader>
+
+        <ScreenContent
+          scrollable={false}
+          contentContainerStyle={[
+            styles.guestContent,
+            { paddingBottom: tabBarHeight + spacing.xl },
+          ]}
+        >
+          <View style={styles.guestContainer}>
+            <View style={styles.guestIconWrap}>
+              <Ionicons
+                name="person-circle-outline"
+                size={80}
+                color={colors.primary.DEFAULT}
+              />
+            </View>
+
+            <Text style={styles.guestTitle}>
+              Connectez-vous à votre compte
+            </Text>
+            <Text style={styles.guestSubtitle}>
+              Gérez vos eSIMs, paiements et paramètres
+            </Text>
+            <Pressable
+              onPress={() =>
+                navigateTo('Register', { source: 'app' })
+              }
+              style={styles.guestRegisterLink}
+            >
+              <Text style={styles.guestRegisterText}>
+                Pas encore de compte ?{' '}
+                <Text style={styles.guestRegisterAccent}>
+                  Créer un compte
+                </Text>
+              </Text>
+            </Pressable>
+          </View>
+        </ScreenContent>
+      </ScreenShell>
+    );
+  }
 
   const initials = `${user?.firstname?.[0] ?? ''}${user?.lastname?.[0] ?? ''}`.toUpperCase();
 
@@ -122,6 +171,65 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: spacing.xl,
     ...patterns.screenPadding,
+  },
+  guestContent: {
+    flex: 1,
+    ...patterns.screenPadding,
+  },
+  guestContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
+  },
+  guestIconWrap: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.primary[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  guestTitle: {
+    ...typography.titleMD,
+    color: colors.text.primary,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  guestSubtitle: {
+    ...typography.bodyMD,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  guestLoginButton: {
+    ...patterns.ctaPrimary,
+    alignSelf: 'stretch',
+    marginTop: spacing.md,
+    backgroundColor: colors.primary.DEFAULT,
+  },
+  guestLoginButtonPressed: {
+    ...patterns.ctaPrimaryPressed,
+    backgroundColor: colors.primary.dark,
+  },
+  guestLoginButtonText: {
+    ...typography.labelLG,
+    color: colors.text.onPrimary,
+    fontWeight: '700',
+  },
+  guestRegisterLink: {
+    paddingVertical: spacing.sm,
+  },
+  guestRegisterText: {
+    ...typography.bodyMD,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  guestRegisterAccent: {
+    color: colors.primary.DEFAULT,
+    fontWeight: '700',
   },
   profileCard: {
     ...patterns.card,

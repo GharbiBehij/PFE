@@ -16,7 +16,10 @@ export class AuthUserResponseDto {
   @ApiProperty({ example: 'CUSTOMER' })
   role: string;
 
-  @ApiProperty({ example: 12500, description: 'User wallet balance in minor units' })
+  @ApiProperty({
+    example: 12500,
+    description: 'User wallet balance in minor units',
+  })
   balance: number;
 }
 

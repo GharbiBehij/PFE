@@ -1,166 +1,183 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { CreateTransactionDto } from 'src/transaction/dto/create-transaction.dto';
 import { TransactionService } from 'src/transaction/transaction.service';
-import { EsimProducer } from 'src/Queue/esim.producer';
+import { EsimProducer } from 'src/Queue/Producer/esim.producer';
 import { userService } from 'src/user/user.service';
-import { WalletService } from '../WalletTransaction/wallet.service';
-import { EsimEventStatus, EsimStatus, Role,LedgerType,LedgerReason } from '@prisma/client';
-import { EsimAuditLogService } from 'src/ProvisionningEvent/EsimAuditLog.service';
-import { PaymentService } from '../payment/payment.service'
-import { randomBytes } from 'crypto';
+import {
+  AuditLayer,
+  AuditTrigger,
+  SystemEvent,
+  TransactionStatus,
+} from '@prisma/client';
+import { AuditLogService } from 'src/ProvisionningEvent/AuditLog.service';
+import {
+  FundingService,
+  FundingSource,
+} from '../payment/Webhook/funding.service';
 
 @Injectable()
 export class EsimPurchaseOrchestrator {
-    constructor(
-        private readonly transactionService: TransactionService,
-        @Inject(forwardRef(() => userService))
-        private readonly userService: userService,
-        private readonly esimProducer: EsimProducer,
-        private readonly paymentService: PaymentService,
-        private readonly esimAuditLogService: EsimAuditLogService,
-        private readonly walletService: WalletService,
-    ) { }
+  constructor(
+    private readonly transactionService: TransactionService,
+    @Inject(forwardRef(() => userService))
+    private readonly userService: userService,
+    private readonly esimProducer: EsimProducer,
+    private readonly fundingService: FundingService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
-    async purchaseEsim(dto: CreateTransactionDto, salesmanId: number) {
-        // 1. check salesman exists
-        const salesman = await this.userService.findById(salesmanId);
-        if (!salesman) throw new Error('Salesman does not exist');
+  async purchaseEsim(dto: CreateTransactionDto, salesmanId: number) {
+    const salesman = await this.userService.findById(salesmanId);
+    if (!salesman) throw new Error('Salesman does not exist');
 
-        // 2. resolve client — fetch existing or create new
-        const client = await this.resolveClient(dto);
+    const client = await this.resolveClient(dto);
 
-        // 3. create transaction linked to client
-        const transaction = await this.transactionService.createInitial(dto, client.id);
+    const transaction = await this.transactionService.createInitial(
+      dto,
+      client.id,
+    );
+    // State: PENDING ✓ (createInitial sets this)
 
-        await this.esimAuditLogService.log({
-            transactionId: transaction.id,
-            userId: client.id,
-            event: EsimEventStatus.PURCHASE_REQUESTED,
-            status: EsimStatus.NOT_ACTIVE,
-            message: `Purchase initiated via ${dto.channel}`,
-        });
+    await this.auditLogService.log({
+      transactionId: transaction.id,
+      userId: client.id,
+      layer: AuditLayer.PROVISIONING,
+      event: SystemEvent.PURCHASE_REQUESTED,
+      toStatus: 'PENDING',
+      triggeredBy: AuditTrigger.USER,
+      message: `Purchase initiated via ${dto.channel}`,
+    });
 
-        if (dto.channel === 'B2C') {
-            return this.processB2C(dto, client.id, transaction.id);
-        }
+    const fundingSource =
+      dto.channel === 'B2B2C' ? FundingSource.WALLET : FundingSource.GATEWAY;
 
-        if (dto.channel === 'B2B2C') {
-            return this.processB2B2C(dto, client.id, salesmanId, transaction.id);
-        }
+    // Transition PENDING → PROCESSING (B2B2C) or PENDING → PENDING_PAYMENT (B2C)
+    await this.transactionService.transition(
+      transaction.id,
+      dto.channel === 'B2B2C'
+        ? TransactionStatus.PROCESSING
+        : TransactionStatus.PENDING_PAYMENT,
+      'orchestrator',
+    );
+
+    const funding = await this.fundingService.execute(
+      fundingSource,
+      dto,
+      transaction.id,
+      client.id,
+      salesmanId,
+    );
+
+    // FAILED
+    if (funding.status === 'FAILED') {
+      await this.transactionService.transition(
+        transaction.id,
+        TransactionStatus.FAILED,
+        'orchestrator',
+      );
+      await this.auditLogService.log({
+        transactionId: transaction.id,
+        userId: client.id,
+        layer:
+          fundingSource === FundingSource.WALLET
+            ? AuditLayer.WALLET
+            : AuditLayer.PAYMENT,
+        event:
+          fundingSource === FundingSource.WALLET
+            ? SystemEvent.WALLET_FAILED
+            : SystemEvent.PAYMENT_FAILED,
+        toStatus: 'FAILED',
+        triggeredBy:
+          fundingSource === FundingSource.WALLET
+            ? AuditTrigger.WORKER
+            : AuditTrigger.PAYMENT_GATEWAY,
+        message: funding.error,
+      });
+      return {
+        transactionId: transaction.id,
+        status: 'FAILED',
+        message:
+          fundingSource === FundingSource.WALLET
+            ? 'WALLET_FAILED'
+            : 'PAYMENT_FAILED',
+        error: funding.error,
+      };
     }
 
-    private async resolveClient(dto: CreateTransactionDto) {
-        // ✅ fetch existing client by email or passportId
-        const existing = await this.userService.findByEmail(dto.email);
-        if (existing) return existing;
-
-        // ✅ create new client with CUSTOMER role
-        return this.userService.create({
-            passportId: dto.passportId,
-            email: dto.email,
-            firstname: dto.firstname,
-            lastname: dto.lastname,
-            password: randomBytes(8).toString('hex'),
-            role: Role.CUSTOMER,
-        });
+    // PENDING — B2C gateway waiting for webhook confirmation.
+    // Do NOT enqueue provisioning here; WebhookService handles that on SUCCESS.
+    if (funding.status === 'PENDING') {
+      await this.auditLogService.log({
+        transactionId: transaction.id,
+        userId: client.id,
+        layer: AuditLayer.PAYMENT,
+        event: SystemEvent.PAYMENT_INITIATED,
+        toStatus: 'PENDING_PAYMENT',
+        triggeredBy: AuditTrigger.PAYMENT_GATEWAY,
+        message: 'Payment initiated — awaiting gateway webhook confirmation',
+      });
+      return {
+        transactionId: transaction.id,
+        status: 'PENDING_PAYMENT',
+        paymentUrl: funding.paymentUrl,
+      };
     }
 
-    private async processB2C(
-        dto: CreateTransactionDto,
-        userId: number,
-        transactionId: number,
-    ) {
-        const paymentResponse = await this.paymentService.initiatePayment(dto, transactionId);
-
-        if (!paymentResponse.success) {
-            await this.transactionService.markFailed(transactionId);
-            await this.esimAuditLogService.log({
-                transactionId,
-                userId,
-                event: EsimEventStatus.PAYMENT_FAILED,
-                status: EsimStatus.NOT_ACTIVE,
-                message: paymentResponse.error,
-            });
-            return { transactionId, status: 'FAILED', message: 'PAYMENT_FAILED', error: paymentResponse.error };
-        }
-
-        
-
-        try {
-            await this.esimProducer.enqueuePurchase({
-                transactionId,
-                userId: userId,
-                channel: dto.channel,
-                offerId: dto.offerId,
-                amount: dto.amount,
-                currency: dto.currency,
-            });
-        } catch (error) {
-            await this.transactionService.markFailed(transactionId);
-            await this.esimAuditLogService.log({
-                transactionId,
-                userId,
-                event: EsimEventStatus.PROVISIONING_FAILED,
-                status: EsimStatus.NOT_ACTIVE,
-                message: `Failed to enqueue job: ${error instanceof Error ? error.message : String(error)}`,
-            });
-            return { transactionId, status: 'FAILED', message: 'QUEUE_FAILED' };
-        }
-
-        return { transactionId, status: 'PENDING', message: 'SUCCESS' };
+    // FUNDED — B2B2C wallet reserved, transition PROCESSING → PROVISIONING
+    if (dto.channel === 'B2B2C') {
+      await this.transactionService.transition(
+        transaction.id,
+        TransactionStatus.PROVISIONING,
+        'orchestrator',
+      );
+    }
+    // Enqueue provisioning job
+    try {
+      await this.esimProducer.enqueuePurchase({
+        transactionId: transaction.id,
+        userId: client.id,
+        channel: dto.channel,
+        offerId: dto.offerId,
+        amount: dto.amount * 1000,
+        currency: dto.currency,
+        paymentMethod: dto.paymentMethod,
+      });
+      
+    } catch (error) {
+      await this.fundingService.releaseWalletFunds(transaction.id);
+      await this.transactionService.transition(
+        transaction.id,
+        TransactionStatus.FAILED,
+        'orchestrator',
+      );
+      await this.auditLogService.log({
+        transactionId: transaction.id,
+        userId: client.id,
+        layer: AuditLayer.PROVISIONING,
+        event: SystemEvent.PROVISIONING_FAILED,
+        toStatus: 'FAILED',
+        triggeredBy: AuditTrigger.WORKER,
+        message: `Failed to enqueue provisioning job: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      return { transactionId: transaction.id, message: 'QUEUE_FAILED' };
     }
 
-    private async processB2B2C(
-        dto: CreateTransactionDto,
-        clientId: number,
-        salesmanId: number,
-        transactionId: number,
-    ) {
-        // ✅ deduct from salesman wallet → status: RESERVED
-        let wallet: any;
-        try {
-            wallet = await this.walletService.ReserveAmount(
-                salesmanId,
-                transactionId,
-                dto.amount,
-                dto.paymentMethod ?? 'WALLET',
-            );
-        } catch (error) {
-            await this.transactionService.markFailed(transactionId);
-            await this.esimAuditLogService.log({
-                transactionId,
-                userId: clientId,
-                event: EsimEventStatus.WALLET_FAILED,
-                status: EsimStatus.NOT_ACTIVE,
-                message: error instanceof Error ? error.message : String(error),
-            });
-            return { transactionId, message: 'WALLET_FAILED', error: error instanceof Error ? error.message : String(error) };
-        }
-
-        try {
-            await this.esimProducer.enqueuePurchase({
-                transactionId,
-                userId: clientId,
-                channel: dto.channel,
-                offerId: dto.offerId,
-                amount: dto.amount,
-                currency: dto.currency,
-                paymentMethod: dto.paymentMethod,
-            });
-        } catch (error) {
-            // ✅ enqueue failed — release RESERVED funds back to salesman
-            await this.walletService.releaseReservedFunds(transactionId);
-            await this.transactionService.markFailed(transactionId);
-            await this.esimAuditLogService.log({
-                transactionId,
-                userId: clientId,
-                event: EsimEventStatus.PROVISIONING_FAILED,
-                status: EsimStatus.NOT_ACTIVE,
-                message: `Failed to enqueue job: ${error instanceof Error ? error.message : String(error)}`,
-            });
-            return { transactionId, message: 'QUEUE_FAILED' };
-        }
-
-        return { transactionId, message: 'SUCCESS' };
+    return { transactionId: transaction.id, message: 'SUCCESS' };
+  }
+  private async resolveClient(dto: CreateTransactionDto) {
+    if (dto.channel === 'B2B2C') {
+      const client = await this.userService.findByEmail(dto.email);
+      if (!client) {
+        throw new Error('Client email not found for B2B2C transaction');
+      }
+      return client;
+    } else {
+      // B2C: create or retrieve user by email
+      const user = await this.userService.findByEmail(dto.email);
+      if (!user) {
+        throw new Error('User email not found for B2C transaction');
+      }
+      return user;
     }
+  }
 }

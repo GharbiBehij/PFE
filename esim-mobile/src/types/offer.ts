@@ -2,14 +2,15 @@ export interface Destination {
   id: string;
   country: string;
   countryCode: string;
-  region: string;
-  imageUrl?: string;
-  startingPrice: number;
   coverageType: 'LOCAL' | 'REGIONAL' | 'GLOBAL';
+  startingPrice: number;
+  offerCount?: number;
+  networkType?: string;
+  Region: string;
 }
 
 export interface Offer {
-  id: string;
+  id: number;
   country: string;
   countryCode: string;
   dataVolume: string;
@@ -19,6 +20,7 @@ export interface Offer {
   providerId: string;
   description?: string;
   popularity?: number;
+  networkType?: string;
 }
 
 export type PlanType = 'data' | 'days';

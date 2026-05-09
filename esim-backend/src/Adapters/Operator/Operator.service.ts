@@ -1,2 +1,1 @@
-export class Operatorservice {
-}
+export class Operatorservice {}

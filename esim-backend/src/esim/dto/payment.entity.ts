@@ -20,6 +20,11 @@ paymentProvider: string ;
 })
 providerRefId: string ;
 @ApiProperty({
+  type: 'string',
+  nullable: true,
+})
+gatewayPaymentId: string  | null;
+@ApiProperty({
   type: 'integer',
   format: 'int32',
 })
@@ -34,10 +39,30 @@ status: string ;
 })
 rawResponse: Prisma.JsonValue  | null;
 @ApiProperty({
+  type: () => Object,
+  nullable: true,
+})
+rawPayload: Prisma.JsonValue  | null;
+@ApiProperty({
+  type: 'string',
+  nullable: true,
+})
+paymentUrl: string  | null;
+@ApiProperty({
+  type: 'string',
+  nullable: true,
+})
+clientSecret: string  | null;
+@ApiProperty({
   type: 'string',
   format: 'date-time',
 })
 createdAt: Date ;
+@ApiProperty({
+  type: 'string',
+  format: 'date-time',
+})
+updatedAt: Date ;
 @ApiProperty({
   type: 'integer',
   format: 'int32',

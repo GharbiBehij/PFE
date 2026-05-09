@@ -82,7 +82,7 @@ export const colors = {
   // Surfaces
   background: '#FAFAFA',      // App background
   surface: '#FFFFFF',         // Card backgrounds
-  surfaceCard: '#FCF7F7',     // Unified Figma card/nav surface
+  surfaceCard: '#FCF7F7',     // Unified Figma card/nav surface (warm white)
   surfaceElevated: '#FFFFFF', // Elevated cards (same as surface for now)
   surfaceMuted: '#F3F4F6',    // Muted surface (gray-100)
   overlay: 'rgba(0, 0, 0, 0.5)', // Modals/sheets
@@ -98,8 +98,8 @@ export const colors = {
     secondary: '#6B7280',     // gray-500
     tertiary: '#6B7280',      // gray-400
     disabled: '#D1D5DB',      // gray-300
-    onPrimary: '#FFFFFF',     // White on purple
-    onSecondary: '#111827',   // Dark on yellow
+    onPrimary: '#FFFFFF',     // White on purple — use on primary-colored backgrounds
+    onSecondary: '#111827',   // Dark on yellow — use on secondary-colored backgrounds
     link: '#7C3AED',          // Primary purple
   },
 

@@ -17,41 +17,65 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── Enums ──────────────────────────────────────────────────────────────────
+
 enum UserStatus {
   ONLINE
   OFFLINE
 }
 
+enum statusDomain {
+  ESIM
+  TRANSACTION
+  
+}
+
 enum Role {
   ADMIN
+  ZONE_CHIEF
   CLIENT
   SALESMAN
   CUSTOMER
 }
+
 enum CoverageType {
   LOCAL
-  REGIONAL 
+  REGIONAL
   GLOBAL
-}
-enum EsimStatus {
-  NOT_ACTIVE
-  ACTIVE
-  PROCESSING
-  PENDING
-  EXPIRED
-  DELETED
-}
-
-enum TransactionStatus {
-  PENDING
-  PROCESSING
-  FAILED
-  SUCCEEDED
 }
 
 enum TransactionChannel {
   B2C
   B2B2C
+}
+
+enum TransactionStatus {
+  PENDING
+  PENDING_PAYMENT
+  PROCESSING
+  PAID
+  PROVISIONING
+  COMPLETED
+  FAILED
+  SUCCEEDED
+  AUTHORIZED
+  EXPIRED
+  REFUNDED
+}
+
+enum EsimStatus {
+  NOT_ACTIVE
+  ACTIVE
+  PROCESSING
+  PENDING
+  FAILED
+  EXPIRED
+  DELETED
+}
+enum providerStatus {
+  SUCCESS
+  FAILED 
+  PENDING 
 }
 
 enum WalletStatus {
@@ -75,8 +99,18 @@ enum LedgerReason {
 
 enum TopUpStatus {
   PENDING
+  PENDING_PAYMENT
+  PENDING_CASH
   APPROVED
+  CREDITED
   REJECTED
+  FAILED
+}
+
+enum TopUpAttemptStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
 }
 
 enum ActivationAttemptStatus {
@@ -85,30 +119,72 @@ enum ActivationAttemptStatus {
   FAILED
   TIMED_OUT
 }
-enum OfferCategory {
-  STUDENT
-  STREAMER
-  INFLUENCER
+
+enum WalletAttemptStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
 }
 
-enum EsimEventStatus {
-  PROVIDER_PROCESSING
-  PROVIDER_TIMEOUT
+// ── Audit enums ────────────────────────────────────────────────────────────
+
+enum AuditLayer {
+  PAYMENT
+  PROVISIONING
+  ACTIVATION
+  WALLET
+  SYSTEM
+}
+
+enum AuditTrigger {
+  PAYMENT_GATEWAY
+  WEBHOOK           
+  PROVIDER
+  WORKER
+  SCHEDULER
+  USER
+  SYSTEM
+}
+
+enum SystemEvent {
+  // ── Payment ──────────────────────────────────
+  PAYMENT_INITIATED
+  PAYMENT_AUTHORIZED
+  PAYMENT_CONFIRMED
+  PAYMENT_FAILED
+  PAYMENT_EXPIRED
+  PAYMENT_REFUNDED
+  PAYMENT_WEBHOOK_RECEIVED
+
+  // ── Wallet ───────────────────────────────────
+  WALLET_RESERVED
+  WALLET_COMMITTED
+  WALLET_RELEASED
+  WALLET_FAILED
+
+  // ── Provisioning ─────────────────────────────
+  PROVISIONING_ENQUEUED
   PROVISIONING_STARTED
   PROVISIONING_SUCCESS
   PROVISIONING_FAILED
-  RETRY_ATTEMPT
+  PROVIDER_PROCESSING
+  PROVIDER_TIMEOUT
+  PROVIDER_NO_RESPONSE
+  PURCHASE_REQUESTED
+
+  // ── Activation ───────────────────────────────
   ACTIVATION_REQUESTED
+  ACTIVATION_PROCESSING
   ACTIVATION_SUCCESS
   ACTIVATION_FAILED
-  TIMEOUT
-  NO_RESPONSE
-  PURCHASE_REQUESTED
-  PAYMENT_PROCESSING
-  PAYMENT_SUCCESS
-  PAYMENT_FAILED
-  WALLET_FAILED
+
+  // ── System ───────────────────────────────────
+  RETRY_ATTEMPT
+  RECONCILIATION_TRIGGERED
+  ILLEGAL_TRANSITION_ATTEMPTED
 }
+
+// ── Models ─────────────────────────────────────────────────────────────────
 
 model User {
   id                 Int        @id @default(autoincrement())
@@ -122,98 +198,92 @@ model User {
   balance            Int        @default(0)
   status             UserStatus @default(OFFLINE)
   role               Role       @default(CLIENT)
+  phone              String?
+  pushToken          String?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
   transactions       Transaction[]
   payments           Payment[]
   walletTransactions WalletTransaction[]
+  walletAttempts     WalletAttempt[]
   esims              Esim[]
   segment            Segment[]
-  
-  phone              String?
-
-  salesmanTopUps     TopUpRequest[] @relation("SalesmanTopUps")
-  reviewedTopUps     TopUpRequest[] @relation("ReviewerTopUps")
+  salesmanTopUps     TopUpRequest[]  @relation("SalesmanTopUps")
+  reviewedTopUps     TopUpRequest[]  @relation("ReviewerTopUps")
+  topUpAttempts      TopUpAttempt[]
+  auditLogs          AuditLog[]
 }
 
 model Offer {
-  id             Int    @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   country        String
   Region         String
   Destination    String
-  Category       String 
+  Category       String
   title          String
   description    String
   popularity     String
-  coverageType   CoverageType  @default(LOCAL)
+  coverageType   CoverageType @default(LOCAL)
+  networkType    String       @default("4G")
   dataVolume     Int
+  countryCode    String
   validityDays   Int
   price          Int
   InternalMargin Int
   providerId     Int
-  isDeleted Boolean   @default(false)
+  isDeleted      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  provider Provider @relation(fields: [providerId], references: [id])
-
+  provider     Provider      @relation(fields: [providerId], references: [id])
   transactions Transaction[]
   esims        Esim[]
 }
 
 model Transaction {
-  id       Int                @id @default(autoincrement())
-  status   TransactionStatus
-  channel  TransactionChannel
-  amount   Int
-  currency String
+  id        Int                @id @default(autoincrement())
+  status    TransactionStatus
+  channel   TransactionChannel
+  amount    Int
+  currency  String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId Int
-  user   User @relation(fields: [userId], references: [id])
-
+  userId  Int
+  user    User  @relation(fields: [userId], references: [id])
   offerId Int
   offer   Offer @relation(fields: [offerId], references: [id])
 
-  esim Esim[]
-
-  payment Payment?
-
+  esim              Esim[]
+  payment           Payment?
   walletTransaction WalletTransaction?
-  EsimAuditLog      EsimAuditLog[]
+  walletAttempt     WalletAttempt?
+  auditLogs         AuditLog[]
 }
 
 model Esim {
-  id             Int             @id @default(autoincrement())
-  iccid          String          @unique
+  id             Int        @id @default(autoincrement())
+  iccid          String     @unique
   activationCode String
   status         EsimStatus
-  event          EsimEventStatus
   qrCode         String?
-  dataTotal      Int             @default(0)
-  dataUsed       Int             @default(0)
+  dataTotal      Int        @default(0)
+  dataUsed       Int        @default(0)
   lastUsageSync  DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  activatedAt    DateTime?
+  expiryDate     DateTime
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  activatedAt DateTime?
-  expiryDate  DateTime
-
-  userId Int
-  user   User @relation(fields: [userId], references: [id])
-
-  transactionId Int
+  userId        Int
+  user          User        @relation(fields: [userId], references: [id])
+  transactionId Int         @unique
   transaction   Transaction @relation(fields: [transactionId], references: [id])
-
-  offerId  Int?
-  offer    Offer?   @relation(fields: [offerId], references: [id])
-
-  providerId Int
-  provider   Provider @relation(fields: [providerId], references: [id])
+  offerId       Int?
+  offer         Offer?      @relation(fields: [offerId], references: [id])
+  providerId    Int
+  provider      Provider    @relation(fields: [providerId], references: [id])
 
   usages             Usage[]
   activationAttempts ActivationAttempt[]
@@ -232,28 +302,30 @@ model Usage {
 }
 
 model Payment {
-  id              Int    @id @default(autoincrement())
-  paymentProvider String
-  providerRefId   String
-  amount          Int
-  status          String
-  rawResponse     Json?
+  id               Int      @id @default(autoincrement())
+  paymentProvider  String
+  providerRefId    String
+  gatewayPaymentId String?  @unique
+  amount           Int
+  status           String
+  rawResponse      Json?
+  rawPayload       Json?
+  paymentUrl       String?
+  clientSecret     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  createdAt DateTime @default(now())
-
-  userId Int
-  user   User @relation(fields: [userId], references: [id])
-
+  userId        Int
+  user          User        @relation(fields: [userId], references: [id])
   transactionId Int         @unique
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 }
 
 model Provider {
-  id     Int    @id @default(autoincrement())
-  name   String
-  apiUrl String
-  apiKey String
-
+  id        Int      @id @default(autoincrement())
+  name      String
+  apiUrl    String
+  apiKey    String
   createdAt DateTime @default(now())
 
   esims Esim[]
@@ -263,15 +335,13 @@ model Provider {
 model WalletTransaction {
   id            Int          @id @default(autoincrement())
   amount        Int
+  balanceAfter  Int
   paymentMethod String
   status        WalletStatus
-  balanceAfter  Int
+  createdAt     DateTime     @default(now())
 
-  createdAt DateTime @default(now())
-
-  userId Int
-  user   User @relation(fields: [userId], references: [id])
-
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id])
   transactionId Int?         @unique
   transaction   Transaction? @relation(fields: [transactionId], references: [id])
 
@@ -281,29 +351,88 @@ model WalletTransaction {
 model WalletLedger {
   id          Int          @id @default(autoincrement())
   amount      Int
-  type        LedgerType   
-  reason      LedgerReason 
-  referenceId Int?         
+  type        LedgerType
+  reason      LedgerReason
+  referenceId Int?
+  createdAt   DateTime     @default(now())
+
+  walletId Int
+  wallet   WalletTransaction @relation(fields: [walletId], references: [id])
+}
+
+model WalletAttempt {
+  id            Int                 @id @default(autoincrement())
+  amount        Int
+  type          LedgerType
+  status        WalletAttemptStatus
+  failureReason String?
+  startedAt     DateTime
+  completedAt   DateTime?
+  createdAt     DateTime            @default(now())
+
+  transactionId Int         @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  userId        Int
+  user          User        @relation(fields: [userId], references: [id])
+
+  @@index([transactionId, status, startedAt])
+}
+
+// ── Audit log ──────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id    String     @id @default(cuid())
+
+  // ── Classification ───────────────────────────
+  layer       AuditLayer
+  event       SystemEvent
+  eventVersion Int @default(1)
+
+  // ── Who ──────────────────────────────────────
+  userId        Int
+  user          User   @relation(fields: [userId], references: [id])
+  jobId         String?
+  attemptNumber Int?
+  sessionId     String?
+  requestId     String?
+
+  // ── State transition ─────────────────────────
+  // String instead of enum so it handles both
+  // TransactionStatus and EsimStatus in one field
+  fromStatus  String?
+  toStatus    String
+  statusDomain  statusDomain
+  
+
+  // ── Why ──────────────────────────────────────
+  triggeredBy   AuditTrigger
+  trigger       String?       // free-form detail e.g. "flouci_webhook"
+
+  // ── Timing ───────────────────────────────────
+  durationMs        Int?
+  providerLatencyMs Int?
+
+  // ── Context ──────────────────────────────────
+  providerCode    String?   // denormalized for query speed
+  paymentProvider String?   // e.g. "FLOUCI", "STRIPE"
+  message         String?
+  details         Json?
 
   createdAt DateTime @default(now())
 
-  walletId  Int
-  wallet    WalletTransaction @relation(fields: [walletId], references: [id])
-}
-
-model EsimAuditLog {
-  id        String          @id @default(cuid())
-  userId    Int
-  jobId     String?
-  event     EsimEventStatus 
-  status    EsimStatus 
-  message   String?
-  details   Json?
-  createdAt DateTime        @default(now())
-
   transactionId Int
   transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  // ── Indexes for analytics + ML ───────────────
+  @@index([transactionId, createdAt])   // full timeline per transaction
+  @@index([layer, event])               // filter by system area
+  @@index([event, triggeredBy])         // causal analysis
+  @@index([userId, createdAt])          // per-user history
+  @@index([providerCode, event])        // provider performance
+  @@index([createdAt])                  // ETL export window
 }
+
+// ── Supporting models ──────────────────────────────────────────────────────
 
 model Segment {
   id          Int    @id
@@ -315,20 +444,47 @@ model Segment {
 }
 
 model TopUpRequest {
-  id          Int          @id @default(autoincrement())
-  salesmanId  Int
-  amount      Float
-  status      TopUpStatus  @default(PENDING)
-  reviewedBy  Int?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id               Int         @id @default(autoincrement())
+  amount           Int
+  currency         String      @default("TND")
+  paymentMethod    String
+  status           TopUpStatus @default(PENDING)
+  gatewayPaymentId String?
+  paymentUrl       String?
+  failureReason    String?
+  creditedAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
-  salesman    User         @relation("SalesmanTopUps", fields: [salesmanId], references: [id])
-  reviewer    User?        @relation("ReviewerTopUps", fields: [reviewedBy], references: [id])
+  salesmanId Int
+  salesman   User  @relation("SalesmanTopUps", fields: [salesmanId], references: [id])
+  reviewedBy Int?
+  reviewer   User? @relation("ReviewerTopUps", fields: [reviewedBy], references: [id])
+
+  topUpAttempt TopUpAttempt?
+
+  @@index([salesmanId, status])
+}
+
+model TopUpAttempt {
+  id            Int                @id @default(autoincrement())
+  amount        Int
+  status        TopUpAttemptStatus
+  failureReason String?
+  startedAt     DateTime
+  completedAt   DateTime?
+  createdAt     DateTime           @default(now())
+
+  topUpRequestId Int          @unique
+  topUpRequest   TopUpRequest @relation(fields: [topUpRequestId], references: [id])
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@index([topUpRequestId, status, startedAt])
 }
 
 model ActivationAttempt {
-  id                String                  @id @default(cuid())
+  id                Int                     @id @default(autoincrement())
   attemptNumber     Int
   status            ActivationAttemptStatus
   providerRequestId String                  @unique

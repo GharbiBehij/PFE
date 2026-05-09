@@ -1,7 +1,34 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(tar -tf design2_output.tar)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(java -version)",
+      "Read(//c/Program Files/Android/Android Studio/jbr/bin/**)",
+      "Read(//c/Program Files/Android/Android Studio/jbr/**)",
+      "Bash(C:/Program Files/Android/Android Studio/jbr/bin/java.exe:*)",
+      "Bash(xargs grep:*)",
+      "Bash(gunzip -c \"C:\\\\Users\\\\Lenovo\\\\.claude\\\\projects\\\\C--Users-Lenovo-Desktop-PFE-esim-mobile\\\\eb639e34-4abe-44c5-a954-0e2192f20fab\\\\tool-results\\\\webfetch-1777979798440-0hgbar.bin\")",
+      "mcp__ide__getDiagnostics",
+      "Bash(gunzip -c \"C:\\\\Users\\\\Lenovo\\\\.claude\\\\projects\\\\C--Users-Lenovo-Desktop-PFE-esim-mobile\\\\fa92902b-b23a-4209-8a03-19a62475d3fe\\\\tool-results\\\\webfetch-1778159079716-1h8pw9.bin\")",
+      "Bash(python3 -c ':*)",
+      "Bash(node -e ':*)",
+      "Bash(node:*)",
+      "Bash(gunzip -c \"C:\\\\Users\\\\Lenovo\\\\.claude\\\\projects\\\\C--Users-Lenovo-Desktop-PFE-esim-mobile\\\\3286144c-1d71-4c63-9834-ed0e6dd6e7c3\\\\tool-results\\\\webfetch-1778174132217-d6pyyb.bin\")",
+      "Bash(tar -x --to-stdout \"netyfly/project/Help Center Redesign.html\")",
+      "Bash(tar -x --to-stdout \"netyfly/chats/chat1.md\")",
+      "Bash(tar --list)",
+      "Bash(tar -x --to-stdout \"netyfly/chats/chat2.md\")",
+      "Bash(gunzip -c \"C:\\\\Users\\\\Lenovo\\\\.claude\\\\projects\\\\C--Users-Lenovo-Desktop-PFE-esim-mobile\\\\114a31c5-417e-4cb5-b219-c5092cf44774\\\\tool-results\\\\webfetch-1778215090401-o343xb.bin\")",
+      "Bash(tar -x -O \"netyfly/project/Reseller Dashboard Redesign.html\")",
+      "Bash(gunzip -c \"C:\\\\Users\\\\Lenovo\\\\.clone\\\\projects\\\\C--Users-Lenovo-Desktop-PFE-esim-mobile\\\\114a31c5-417e-4cb5-b219-c5092cf44774\\\\tool-results\\\\webfetch-1778215090401-o343xb.bin\")",
+      "Read(//c/Users/Lenovo/Desktop/PFE/esim-backend/**)",
+      "Bash(npx prisma:*)",
+      "Bash(Test-Path:*)",
+      "Bash(npx expo:*)"
     ]
   }
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { RefObject } from 'react';
 import type { ScrollViewProps, StyleProp, ViewStyle } from 'react-native';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
@@ -8,6 +9,8 @@ type ScreenContentProps = {
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   showsVerticalScrollIndicator?: ScrollViewProps['showsVerticalScrollIndicator'];
+  keyboardShouldPersistTaps?: ScrollViewProps['keyboardShouldPersistTaps'];
+  scrollViewRef?: RefObject<ScrollView | null>;
 };
 
 export const ScreenContent = ({
@@ -16,6 +19,8 @@ export const ScreenContent = ({
   style,
   contentContainerStyle,
   showsVerticalScrollIndicator = false,
+  keyboardShouldPersistTaps,
+  scrollViewRef,
 }: ScreenContentProps) => {
   if (!scrollable) {
     return <View style={[styles.content, style]}>{children}</View>;
@@ -23,8 +28,10 @@ export const ScreenContent = ({
 
   return (
     <ScrollView
+      ref={scrollViewRef}
       contentContainerStyle={contentContainerStyle}
       showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
       style={[styles.content, style]}
     >
       {children}

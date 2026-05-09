@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { userService } from './user.service';
 import { CreateUserDto } from './dto/Create.User.dto';
@@ -32,7 +40,9 @@ export class userController {
 
   @Post()
   @ApiExcludeEndpoint()
-  @ApiOperation({ summary: 'Sell eSIM for customer (hidden due duplicate route)' })
+  @ApiOperation({
+    summary: 'Sell eSIM for customer (hidden due duplicate route)',
+  })
   @ApiResponse({ status: 201, type: PurchaseResponseDto })
   @ApiResponse({ status: 400, type: ErrorResponseDto })
   async Sell(@Body() dto: SellEsimDto, userId: number) {
@@ -44,7 +54,11 @@ export class userController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get authenticated user profile' })
   @ApiResponse({ status: 200, type: ProfileResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   getProfile(@Req() req: Request) {
     return this.userService.getProfile((req.user as any).userId);
   }
@@ -54,8 +68,16 @@ export class userController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update authenticated user profile' })
   @ApiResponse({ status: 200, type: ProfileResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
-  @ApiResponse({ status: 409, description: 'Email already taken', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Email already taken',
+    type: ErrorResponseDto,
+  })
   updateProfile(@Body() dto: UpdateProfileDto, @Req() req: Request) {
     return this.userService.updateProfile((req.user as any).userId, dto);
   }
@@ -65,8 +87,25 @@ export class userController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Change password for authenticated user' })
   @ApiResponse({ status: 201, description: 'Password changed successfully' })
-  @ApiResponse({ status: 401, description: 'Current password incorrect', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Current password incorrect',
+    type: ErrorResponseDto,
+  })
   changePassword(@Body() dto: ChangePasswordDto, @Req() req: Request) {
     return this.userService.changePassword((req.user as any).userId, dto);
+  }
+
+  @Patch('push-token')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Register Expo push token for notifications' })
+  async updatePushToken(
+    @Body() body: { pushToken: string },
+    @Req() req: Request,
+  ): Promise<{ success: boolean }> {
+    const userId = (req.user as any).userId;
+    await this.userService.updatePushToken(userId, body.pushToken);
+    return { success: true };
   }
 }

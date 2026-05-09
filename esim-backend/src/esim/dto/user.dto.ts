@@ -56,6 +56,16 @@ status: UserStatus ;
 role: Role ;
 @ApiProperty({
   type: 'string',
+  nullable: true,
+})
+phone: string  | null;
+@ApiProperty({
+  type: 'string',
+  nullable: true,
+})
+pushToken: string  | null;
+@ApiProperty({
+  type: 'string',
   format: 'date-time',
 })
 createdAt: Date ;
@@ -64,9 +74,4 @@ createdAt: Date ;
   format: 'date-time',
 })
 updatedAt: Date ;
-@ApiProperty({
-  type: 'string',
-  nullable: true,
-})
-phone: string  | null;
 }

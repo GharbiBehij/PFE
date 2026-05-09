@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { EsimService } from './esim.service';
 import { EsimRepository } from './esim.repository';
 import { TransactionRepository } from '../transaction/transaction.repository';
+import { AuditLogService } from '../ProvisionningEvent/AuditLog.service';
 import { PROVIDER_ADAPTER } from './adapters/provider-adapter.token';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import { EsimStatus } from '@prisma/client';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 
 const mockEsimRepository = {
   findByUserId: jest.fn<() => Promise<any[]>>(),
@@ -30,10 +32,37 @@ const mockProviderAdapter = {
   deactivateEsim: jest.fn<() => Promise<any>>(),
 };
 
-const mockCacheManager = {
-  get: jest.fn<() => Promise<any>>(),
-  set: jest.fn<() => Promise<any>>(),
+// ── New mocks for missing providers ──────────────────────────────────────────
+
+const mockPrismaService = {
+  $transaction: jest.fn(),
+  esim: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+  },
+  activationAttempt: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    count: jest.fn(),
+    update: jest.fn(),
+  },
 };
+
+const mockAuditLogService = {
+  log: jest.fn(),
+};
+
+const mockConfigService: jest.Mocked<ConfigService> = {
+  get: jest.fn((key: string, defaultValue?: unknown) => {
+    if (key === 'ESIM_MAX_ACTIVATION_ATTEMPTS') return 5;
+    return defaultValue;
+  }) as unknown as ConfigService['get'],
+} as jest.Mocked<ConfigService>;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeEsim(overrides: Partial<any> = {}): any {
   return {
@@ -52,6 +81,8 @@ function makeEsim(overrides: Partial<any> = {}): any {
   };
 }
 
+// ── Tests ────────────────────────────────────────────────────────────────────
+
 describe('EsimService', () => {
   let service: EsimService;
 
@@ -61,17 +92,19 @@ describe('EsimService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EsimService,
-        { provide: EsimRepository, useValue: mockEsimRepository },
+        { provide: EsimRepository,       useValue: mockEsimRepository },
         { provide: TransactionRepository, useValue: mockTransactionRepository },
-        { provide: PROVIDER_ADAPTER, useValue: mockProviderAdapter },
-        { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        { provide: PROVIDER_ADAPTER,      useValue: mockProviderAdapter },
+        { provide: PrismaService,         useValue: mockPrismaService },      // ← added
+        { provide: AuditLogService,       useValue: mockAuditLogService },    // ← added
+        { provide: ConfigService,         useValue: mockConfigService },      // ← added
       ],
     }).compile();
 
     service = module.get<EsimService>(EsimService);
   });
 
-  // ── getUserEsims ────────────────────────────────────────────────────────────
+  // ── getUserEsims ──────────────────────────────────────────────────────────
 
   describe('getUserEsims', () => {
     it('splits ACTIVE into active[] and EXPIRED/DELETED into expired[]', async () => {
@@ -88,19 +121,23 @@ describe('EsimService', () => {
     });
   });
 
-  // ── getEsimById ─────────────────────────────────────────────────────────────
+  // ── getEsimById ───────────────────────────────────────────────────────────
 
   describe('getEsimById', () => {
     it('throws ForbiddenException when userId does not match esim owner', async () => {
-      mockEsimRepository.findByIdWithOffer.mockResolvedValue(makeEsim({ userId: 99 }));
-      await expect(service.getEsimById(10, 1)).rejects.toThrow(ForbiddenException);
+      mockEsimRepository.findByIdWithOffer.mockResolvedValue(
+        makeEsim({ userId: 99 }),
+      );
+      await expect(service.getEsimById(10, 1)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('calls syncUsage when lastUsageSync is null', async () => {
       const esim = makeEsim({ lastUsageSync: null });
       mockEsimRepository.findByIdWithOffer
-        .mockResolvedValueOnce(esim)   // getEsimById call
-        .mockResolvedValueOnce(esim);  // inside syncUsage
+        .mockResolvedValueOnce(esim)
+        .mockResolvedValueOnce(esim);
       mockEsimRepository.updateUsage.mockResolvedValue(esim);
 
       const syncSpy = jest.spyOn(service, 'syncUsage');
@@ -122,7 +159,7 @@ describe('EsimService', () => {
     });
 
     it('does NOT call syncUsage when lastUsageSync is fresh', async () => {
-      const fresh = new Date(Date.now() - 60 * 1000); // 1 min ago
+      const fresh = new Date(Date.now() - 60 * 1000);
       const esim = makeEsim({ lastUsageSync: fresh });
       mockEsimRepository.findByIdWithOffer.mockResolvedValue(esim);
 
@@ -132,19 +169,29 @@ describe('EsimService', () => {
     });
   });
 
-  // ── deleteEsim ──────────────────────────────────────────────────────────────
+  // ── deleteEsim ────────────────────────────────────────────────────────────
 
   describe('deleteEsim', () => {
     it('throws ForbiddenException when userId does not match esim owner', async () => {
-      mockEsimRepository.findByIdWithOffer.mockResolvedValue(makeEsim({ userId: 99 }));
-      await expect(service.deleteEsim(10, 1)).rejects.toThrow(ForbiddenException);
+      mockEsimRepository.findByIdWithOffer.mockResolvedValue(
+        makeEsim({ userId: 99 }),
+      );
+      await expect(service.deleteEsim(10, 1)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('throws BadRequestException when eSIM is ACTIVE with remaining data', async () => {
       mockEsimRepository.findByIdWithOffer.mockResolvedValue(
-        makeEsim({ status: EsimStatus.ACTIVE, dataTotal: 5120, dataUsed: 1000 }),
+        makeEsim({
+          status: EsimStatus.ACTIVE,
+          dataTotal: 5120,
+          dataUsed: 1000,
+        }),
       );
-      await expect(service.deleteEsim(10, 1)).rejects.toThrow(BadRequestException);
+      await expect(service.deleteEsim(10, 1)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('soft-deletes an EXPIRED eSIM and returns success message', async () => {

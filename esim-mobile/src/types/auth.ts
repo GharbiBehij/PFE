@@ -1,10 +1,10 @@
 export interface User {
-  id: string;
+  id: number | string;
   email: string;
   firstname: string;
   lastname: string;
-  role: 'CLIENT' | 'SALESMAN' | 'CUSTOMER';
-  status: 'ONLINE' | 'OFFLINE';
+  role: 'CUSTOMER' | 'CLIENT' | 'SALESMAN' | 'ZONE_CHIEF';
+  status?: 'ONLINE' | 'OFFLINE';
   balance?: number;
 }
 

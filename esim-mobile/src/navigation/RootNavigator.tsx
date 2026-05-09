@@ -1,14 +1,27 @@
-import { AuthStack } from './AuthStack';
-import { MainTabs } from './MainTabs';
+import { AuthStack } from './Client/AuthStack';
+import { MainTabs } from './Client/MainTabs';
+import { ResellerTabs } from './reseller/ResellerTabs';
+import { WebOnlyScreen } from '../screens/auth/WebOnlyScreen';
 import { LoadingOverlay } from '../components/LoadingOverlay';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../hooks/client/useAuth';
 
 export const RootNavigator = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isLoading, user } = useAuth();
 
   if (isLoading) {
-    return <LoadingOverlay message="Initialisation de la session..." />;
+    return <LoadingOverlay />;
   }
 
-  return isAuthenticated ? <MainTabs /> : <AuthStack />;
+  if (!user) {
+    return <AuthStack />;
+  }
+
+  switch (user.role) {
+    case 'SALESMAN':
+      return <ResellerTabs />;
+    case 'ZONE_CHIEF':
+      return <WebOnlyScreen />;
+    default:
+      return <MainTabs />;
+  }
 };

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,11 +7,13 @@ import 'package:flutter/services.dart';
 import 'package:esim_frontend/core/motion/app_motion.dart';
 import 'package:esim_frontend/core/motion/widgets/motion_page_enter.dart';
 import 'package:esim_frontend/core/motion/widgets/motion_pressable.dart';
+import 'package:esim_frontend/core/router/route_names.dart';
 import 'package:esim_frontend/core/theme/app_theme.dart';
 import 'package:esim_frontend/core/widgets/country_flag.dart';
 import 'package:esim_frontend/core/widgets/empty_state.dart';
 import 'package:esim_frontend/features/offers/models/offer.dart';
 import 'package:esim_frontend/features/offers/presentation/providers/offer_providers.dart';
+import 'package:esim_frontend/features/payment/presentation/providers/payment_providers.dart';
 
 class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({required this.packageId, super.key});
@@ -34,11 +34,51 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (_isLoading) return;
 
     setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(seconds: 2));
+    final paymentMethod = _selectedMethod == 'wallet' ? 'wallet' : 'cash';
+
+    try {
+      await ref.read(purchaseProvider.notifier).purchase(
+            offerId: _offerId,
+            paymentMethod: paymentMethod,
+          );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<PurchaseState>(purchaseProvider, (_, next) {
+      if (!mounted) return;
+
+      if (next is PurchaseError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.message),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+
+      if (next is PurchaseSuccess) {
+        final failed =
+            next.result.status.toUpperCase() == 'FAILED' ||
+            next.result.message.toUpperCase().contains('FAILED');
+
+        if (failed) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(next.result.error ?? 'Payment failed'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return;
+        }
+
+        context.push(RouteNames.success, extra: next.result);
+      }
+    });
+
     final offerAsync = ref.watch(offerDetailProvider(_offerId));
 
     return offerAsync.when(

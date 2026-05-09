@@ -3,9 +3,28 @@ import { AppModule } from './app/app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as express from 'express';
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 async function bootstrap() {
+  // Do NOT pass rawBody: true — we handle it manually below
   const app = await NestFactory.create(AppModule);
+
+  // ── Webhook route — raw body BEFORE json parser ────────────────
+  app.use('/payment/webhook', (req: any, res: any, next: any) => {
+    express.raw({ type: 'application/json' })(req, res, (err) => {
+      if (err) return next(err);
+      // Manually attach to rawBody so RawBodyRequest works
+      req.rawBody = req.body;
+      next();
+    });
+  });
+
+  // ── Global JSON parser for all other routes ────────────────────
+  app.use(express.json());
+
+  // ── Rest of middleware ─────────────────────────────────────────
   app.enableCors({
     origin: true,
     credentials: true,
@@ -49,6 +68,5 @@ async function bootstrap() {
   }
 
   await app.listen(process.env.PORT || 3000);
-
 }
 bootstrap();

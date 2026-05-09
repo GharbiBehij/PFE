@@ -10,15 +10,16 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { DestinationCard } from '../../components/DestinationCard';
+import { DestinationCard } from '../../components/Cards/DestinationCard';
+import { ErrorBanner } from '../../components/ErrorBanner';
 import {
   ScreenContent,
   ScreenHeader,
   ScreenShell,
 } from '../../components/layout';
 
-import { useAuth } from '../../hooks/useAuth';
-import { useDestinations } from '../../hooks/useOffers';
+import { useAuth } from '../../hooks/client/useAuth';
+import { useDestinations } from '../../hooks/client/useOffers';
 import type { HomeStackParamList } from '../../navigation/types';
 
 import {
@@ -36,10 +37,16 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'Home'>;
 type HomeTab = 'LOCAL' | 'REGIONAL' | 'GLOBAL';
 
 const tabs: Array<{ key: HomeTab; label: string }> = [
-  { key: 'LOCAL', label: 'Local' },
-  { key: 'REGIONAL', label: 'Regional' },
-  { key: 'GLOBAL', label: 'Global' },
+  { key: 'LOCAL', label: 'Locale' },
+  { key: 'REGIONAL', label: 'Régional' },
+  { key: 'GLOBAL', label: 'Mondial' },
 ];
+
+const sectionTitleByTab: Record<HomeTab, string> = {
+  LOCAL: 'Destinations populaires',
+  REGIONAL: 'Régions',
+  GLOBAL: 'Forfaits mondiaux',
+};
 
 export const HomeScreen = ({ navigation }: Props) => {
   const tabBarHeight = useBottomTabBarHeight();
@@ -50,7 +57,7 @@ export const HomeScreen = ({ navigation }: Props) => {
   const destinationsQuery = useDestinations();
   const accountName = `${user?.firstname ?? ''} ${user?.lastname ?? ''}`.trim()
     || user?.email?.split('@')[0]
-    || 'Utilisateur';
+    || 'Voyageur!';
 
   const filteredDestinations = useMemo(() => {
     const list = Array.isArray(destinationsQuery.data)
@@ -77,14 +84,18 @@ export const HomeScreen = ({ navigation }: Props) => {
       {/* 🔹 HEADER (sticky) */}
       <ScreenHeader style={styles.header}>
         <View style={styles.headerRow}>
-          <Text numberOfLines={1} style={styles.headerTitle}>{`Bienvenue ${accountName}`}</Text>
+          <View style={styles.greetingBlock}>
+            <Text style={styles.greetingSub}>Bonjour 👋</Text>
+            <Text numberOfLines={1} style={styles.headerTitle}>{accountName}</Text>
+          </View>
 
           <Pressable style={styles.iconButton}>
             <Ionicons
               name="notifications-outline"
               size={sizes.icon.md}
-              color={colors.text.onPrimary}
+              color={colors.primary.DEFAULT}
             />
+            <View style={styles.notifBadge} />
           </Pressable>
         </View>
 
@@ -99,7 +110,7 @@ export const HomeScreen = ({ navigation }: Props) => {
             color={colors.text.secondary}
           />
           <Text style={styles.searchText}>
-            Search data packs...
+            Rechercher un pays ou région
           </Text>
         </Pressable>
       </ScreenHeader>
@@ -110,6 +121,20 @@ export const HomeScreen = ({ navigation }: Props) => {
         }}
         showsVerticalScrollIndicator={false}
       >
+        {/* 🔹 PROMO STRIP */}
+        <View style={styles.promoSection}>
+          <Pressable style={styles.promoStrip}>
+            <View style={styles.promoIcon}>
+              <Text style={styles.promoEmoji}>🌍</Text>
+            </View>
+            <View style={styles.promoText}>
+              <Text style={styles.promoTitle}>Europe illimitée — 39.90 TND</Text>
+              <Text style={styles.promoSub}>30 pays · 15 jours · économisez 20 TND</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={sizes.icon.sm} color={colors.primary.DEFAULT} />
+          </Pressable>
+        </View>
+
         {/* 🔹 FILTERS (SECONDARY) */}
         <View style={styles.filtersSection}>
           <View style={styles.tabsWrap}>
@@ -141,6 +166,7 @@ export const HomeScreen = ({ navigation }: Props) => {
 
         {/* 🔹 CONTENT (TERTIARY) */}
         <View style={styles.contentSection}>
+          <Text style={styles.sectionTitle}>{sectionTitleByTab[activeTab]}</Text>
           {destinationsQuery.isLoading && (
             <View style={styles.stateCard}>
               <ActivityIndicator
@@ -149,7 +175,16 @@ export const HomeScreen = ({ navigation }: Props) => {
             </View>
           )}
 
-          {!destinationsQuery.isLoading && (
+          {destinationsQuery.isError && (
+            <View style={styles.stateCard}>
+              <ErrorBanner
+                message="Impossible de charger les destinations."
+                onRetry={() => destinationsQuery.refetch()}
+              />
+            </View>
+          )}
+
+          {!destinationsQuery.isLoading && !destinationsQuery.isError && (
             <Animated.View
               key={activeTab}
               entering={
@@ -171,15 +206,33 @@ export const HomeScreen = ({ navigation }: Props) => {
                   <DestinationCard
                     destination={item}
                     flagVariant="authentic"
-                    onPress={() =>
-                      navigation.navigate('PackageListing', {
-                        countryId: item.country,
-                      })
-                    }
+                    onPress={() => {
+                      if (item.coverageType === 'LOCAL') {
+                        navigation.navigate('PackageListing', {
+                          countryId: item.country,
+                        });
+                      } else if (item.coverageType === 'REGIONAL') {
+                        navigation.navigate('PackageListing', {
+                          countryId: item.Region,
+                          coverageType: 'REGIONAL',
+                        });
+                      } else {
+                        navigation.navigate('PackageListing', {
+                          countryId: 'Mondial',
+                          coverageType: 'GLOBAL',
+                        });
+                      }
+                    }}
                   />
                 </View>
-              ))}
-            </Animated.View>
+                ))}
+              </Animated.View>
+          )}
+
+          {!destinationsQuery.isLoading && !destinationsQuery.isError && filteredDestinations.length === 0 && (
+            <View style={styles.stateCard}>
+              <Text style={styles.emptyText}>Aucune destination disponible pour le moment.</Text>
+            </View>
           )}
         </View>
 
@@ -202,21 +255,43 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
 
+  greetingBlock: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+
+  greetingSub: {
+    ...typography.bodySM,
+    color: colors.text.secondary,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+
   headerTitle: {
     ...typography.titleLG,
     color: colors.text.primary,
-    flex: 1,
-    marginRight: spacing.md,
   },
 
   iconButton: {
     height: sizes.touch.sm,
     width: sizes.touch.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.primary.DEFAULT,
+    backgroundColor: colors.primary[100],
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.medium,
+  },
+
+  notifBadge: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 7,
+    height: 7,
+    borderRadius: radii.full,
+    backgroundColor: colors.secondary.DEFAULT,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
   },
 
   /* SEARCH */
@@ -230,6 +305,54 @@ const styles = StyleSheet.create({
     ...typography.bodyMD,
     color: colors.text.secondary,
     marginLeft: spacing.sm,
+  },
+
+  /* PROMO STRIP */
+  promoSection: {
+    marginTop: spacing.lg,
+    ...patterns.screenPadding,
+  },
+
+  promoStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.card,
+    padding: spacing.md,
+    ...shadows.medium,
+  },
+
+  promoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: colors.primary[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  promoEmoji: {
+    fontSize: 18,
+  },
+
+  promoText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  promoTitle: {
+    ...typography.labelSM,
+    color: colors.text.primary,
+  },
+
+  promoSub: {
+    ...typography.bodySM,
+    color: colors.text.secondary,
+    marginTop: 2,
   },
 
   /* FILTERS */
@@ -274,6 +397,12 @@ const styles = StyleSheet.create({
     ...patterns.screenPadding,
   },
 
+  sectionTitle: {
+    ...typography.overline,
+    color: colors.text.secondary,
+    marginBottom: spacing.md,
+  },
+
   destinationCardGap: {
     marginBottom: spacing.md,
   },
@@ -282,5 +411,10 @@ const styles = StyleSheet.create({
     ...patterns.card,
     alignItems: 'center',
     paddingVertical: spacing.xl,
+  },
+  emptyText: {
+    ...typography.bodyMD,
+    color: colors.text.secondary,
+    textAlign: 'center',
   },
 });

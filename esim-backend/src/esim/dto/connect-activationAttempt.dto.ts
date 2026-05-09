@@ -1,18 +1,19 @@
 
 import {ApiProperty} from '@nestjs/swagger'
-import {IsOptional,IsString} from 'class-validator'
+import {IsInt,IsOptional,IsString} from 'class-validator'
 
 
 
 
 export class ConnectActivationAttemptDto {
   @ApiProperty({
-  type: 'string',
+  type: 'integer',
+  format: 'int32',
   required: false,
 })
 @IsOptional()
-@IsString()
-id?: string ;
+@IsInt()
+id?: number ;
 @ApiProperty({
   type: 'string',
   required: false,

@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException, Inject, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  ForbiddenException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { CreateEsimDto } from './adapters/create-esim.dto';
 import { UpdateEsimDto } from './dto/update-esim.dto';
@@ -10,65 +15,199 @@ import { EsimRepository } from './esim.repository';
 import { ProviderAdapter } from './interfaces/provider-adapter.interface';
 import { PROVIDER_ADAPTER } from './adapters/provider-adapter.token';
 import { TransactionRepository } from 'src/transaction/transaction.repository';
-import { EsimStatus, EsimEventStatus, TransactionStatus } from '@prisma/client';
-import { getCountryImage } from './constants/country-images';
+import {
+  EsimStatus,
+  TransactionStatus,
+  AuditLayer,
+  AuditTrigger,
+  SystemEvent,
+  statusDomain,
+  Esim,
+} from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { AuditLogService } from '../ProvisionningEvent/AuditLog.service';
+import { PrismaService } from '../../prisma/prisma.service';
+
+const ESIM_TRANSITIONS: Record<EsimStatus, EsimStatus[]> = {
+  [EsimStatus.NOT_ACTIVE]: [EsimStatus.PENDING],
+  [EsimStatus.PENDING]: [EsimStatus.PROCESSING],
+  [EsimStatus.PROCESSING]: [EsimStatus.ACTIVE, EsimStatus.FAILED],
+  [EsimStatus.ACTIVE]: [],
+  [EsimStatus.FAILED]: [],
+  [EsimStatus.EXPIRED]: [],
+  [EsimStatus.DELETED]: [],
+};
+
+export const TERMINAL_ESIM_STATUSES = new Set<EsimStatus>([
+  EsimStatus.ACTIVE,
+  EsimStatus.FAILED,
+  EsimStatus.EXPIRED,
+  EsimStatus.DELETED,
+]);
+
+export function assertValidEsimTransition(
+  from: EsimStatus,
+  to: EsimStatus,
+  esimId: number,
+): void {
+  if (from === EsimStatus.DELETED) {
+    throw new BadRequestException(
+      `eSIM ${esimId} is deleted and cannot be transitioned`,
+    );
+  }
+
+  const allowed = ESIM_TRANSITIONS[from] ?? [];
+
+  if (!allowed.includes(to)) {
+    throw new BadRequestException(
+      `Invalid eSIM transition: ${from} → ${to} for esimId=${esimId}`,
+    );
+  }
+}
 
 @Injectable()
 export class EsimService {
   private readonly logger = new Logger(EsimService.name);
-  private static readonly DESTINATIONS_CACHE_KEY = 'destinations:list:v2';
-  private static readonly DESTINATIONS_CACHE_TTL_SECONDS = 300;
 
   constructor(
     private readonly esimRepository: EsimRepository,
     @Inject(PROVIDER_ADAPTER) private readonly providerAdapter: ProviderAdapter,
     private readonly transactionRepository: TransactionRepository,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) { }
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+    private readonly config: ConfigService,
+  ) {}
 
-  async getDestinations(): Promise<DestinationResponseDto[]> {
+  async getDestinations() {
+    const pickBestNetwork = (types: Set<string>): string => {
+      if (types.has('5G')) return '5G';
+      if (types.has('4G/5G')) return '4G/5G';
+      return '4G';
+    };
     try {
-      // Cache strategy: read-through cache with a 5-minute TTL to reduce groupBy DB load.
-      const cached = await this.cacheManager.get<DestinationResponseDto[]>(
-        EsimService.DESTINATIONS_CACHE_KEY,
-      );
-      if (cached !== undefined && cached !== null) {
-        return cached;
+      const offers = await this.prisma.offer.findMany({
+        where: { isDeleted: false },
+        select: {
+          country: true,
+          coverageType: true,
+          networkType: true,
+          Region: true,
+          price: true,
+        },
+      });
+
+      const localMap = new Map<string, {
+        country: string;
+        prices: number[];
+        count: number;
+        Region: string;
+        networkTypes: Set<string>;
+      }>();
+
+      const regionalMap = new Map<string, {
+        region: string;
+        prices: number[];
+        count: number;
+        networkTypes: Set<string>;
+      }>();
+
+      const globalAcc: { prices: number[]; count: number; networkTypes: Set<string> } = {
+        prices: [],
+        count: 0,
+        networkTypes: new Set(),
+      };
+
+      for (const offer of offers) {
+        const net = offer.networkType ?? '4G';
+
+        if (offer.coverageType === 'LOCAL') {
+          if (!localMap.has(offer.country)) {
+            localMap.set(offer.country, {
+              country: offer.country,
+              prices: [],
+              count: 0,
+              Region: offer.Region,
+              networkTypes: new Set(),
+            });
+          }
+          const entry = localMap.get(offer.country)!;
+          entry.prices.push(offer.price);
+          entry.networkTypes.add(net);
+          entry.count++;
+        }
+
+        if (offer.coverageType === 'REGIONAL') {
+          if (!regionalMap.has(offer.Region)) {
+            regionalMap.set(offer.Region, {
+              region: offer.Region,
+              prices: [],
+              count: 0,
+              networkTypes: new Set(),
+            });
+          }
+          const entry = regionalMap.get(offer.Region)!;
+          entry.prices.push(offer.price);
+          entry.networkTypes.add(net);
+          entry.count++;
+        }
+
+        if (offer.coverageType === 'GLOBAL') {
+          globalAcc.prices.push(offer.price);
+          globalAcc.networkTypes.add(net);
+          globalAcc.count++;
+        }
       }
 
-      const aggregated =
-        await this.esimRepository.aggregateDestinationsByCountryAndCoverageType();
-      const destinations: DestinationResponseDto[] = aggregated
-        .map((destination) => {
-          const minPrice = destination._min?.price ?? 0;
-          const maxPrice = destination._max?.price ?? 0;
-          const offerCount = destination._count?._all ?? 0;
+      const local = Array.from(localMap.values()).map((entry) => ({
+        id: entry.country,
+        country: entry.country,
+        countryCode: '',
+        coverageType: 'LOCAL' as const,
+        startingPrice: Math.min(...entry.prices),
+        offerCount: entry.count,
+        networkType: pickBestNetwork(entry.networkTypes),
+        Region: entry.Region,
+      }));
 
-          return {
-            country: destination.country,
-            region: destination.Region,
-            coverageType: destination.coverageType,
-            offerCount,
-            priceRange: {
-              min: minPrice,
-              max: maxPrice,
-            },
-            imageUrl: getCountryImage(destination.country),
-            lowestPrice: minPrice,
-          };
-        })
-        .sort((a, b) => b.offerCount - a.offerCount);
+      const regionCodeMap: Record<string, string> = {
+        'Europe':        'eu',
+        'Asia':          'jp',
+        'Middle East':   'ae',
+        'North America': 'us',
+        'Oceania':       'au',
+      };
 
-      await this.cacheManager.set(
-        EsimService.DESTINATIONS_CACHE_KEY,
-        destinations,
-        EsimService.DESTINATIONS_CACHE_TTL_SECONDS,
-      );
+      const regional = Array.from(regionalMap.values()).map((entry) => ({
+        id: entry.region,
+        country: entry.region,
+        countryCode: regionCodeMap[entry.region] ?? 'eu',
+        coverageType: 'REGIONAL' as const,
+        startingPrice: Math.min(...entry.prices),
+        offerCount: entry.count,
+        networkType: pickBestNetwork(entry.networkTypes),
+        Region: entry.region,
+      }));
 
-      return destinations;
+      const global = globalAcc.count > 0
+        ? [{
+            id: 'mondial',
+            country: 'Mondial',
+            countryCode: 'world',
+            coverageType: 'GLOBAL' as const,
+            startingPrice: Math.min(...globalAcc.prices),
+            offerCount: globalAcc.count,
+            networkType: pickBestNetwork(globalAcc.networkTypes),
+            Region: 'Global',
+          }]
+        : [];
+
+      return [...local, ...regional, ...global];
     } catch (error: unknown) {
       const stack = error instanceof Error ? error.stack : undefined;
-      this.logger.error('Failed to aggregate destinations; returning empty list.', stack);
+      this.logger.error(
+        'Failed to aggregate destinations; returning empty list.',
+        stack,
+      );
       return [];
     }
   }
@@ -80,7 +219,8 @@ export class EsimService {
     providerId: number,
   ) {
     try {
-      const transaction = await this.transactionRepository.findOne(transactionId);
+      const transaction =
+        await this.transactionRepository.findOne(transactionId);
       if (!transaction) {
         throw new NotFoundException('Transaction Not found');
       }
@@ -100,7 +240,6 @@ export class EsimService {
           transactionId,
           expiryDate: esimData.expiryDate,
           status: EsimStatus.NOT_ACTIVE,
-          event: EsimEventStatus.PROVISIONING_STARTED,
           userId,
           providerId,
         },
@@ -108,13 +247,15 @@ export class EsimService {
       );
 
       return { success: true, esim };
-
     } catch (error: any) {
       if (error.isTimeout || error?.status >= 500) {
         throw new Error('Transient Provider Error');
       }
 
-      await this.transactionRepository.updateStatus(transactionId, TransactionStatus.FAILED);
+      await this.transactionRepository.updateStatus(
+        transactionId,
+        TransactionStatus.FAILED,
+      );
       return { success: false, terminal: true, error: error?.message };
     }
   }
@@ -144,12 +285,15 @@ export class EsimService {
     const esims = await this.esimRepository.findByUserId(userId);
 
     const active = esims
-      .filter(e => e.status === EsimStatus.ACTIVE)
-      .map(e => this.toResponseDto(e));
+      .filter((e) => e.status === EsimStatus.ACTIVE)
+      .map((e) => this.toResponseDto(e));
 
     const expired = esims
-      .filter(e => e.status === EsimStatus.EXPIRED || e.status === EsimStatus.DELETED)
-      .map(e => this.toResponseDto(e));
+      .filter(
+        (e) =>
+          e.status === EsimStatus.EXPIRED || e.status === EsimStatus.DELETED,
+      )
+      .map((e) => this.toResponseDto(e));
 
     return { active, expired };
   }
@@ -177,7 +321,10 @@ export class EsimService {
 
     // TODO: integrate real provider API
     const increment = Math.floor(Math.random() * 41) + 10; // mock: 10–50 MB
-    const newDataUsed = Math.min((esim.dataUsed ?? 0) + increment, esim.dataTotal ?? 0);
+    const newDataUsed = Math.min(
+      (esim.dataUsed ?? 0) + increment,
+      esim.dataTotal ?? 0,
+    );
 
     return this.esimRepository.updateUsage(esimId, newDataUsed);
   }
@@ -201,7 +348,10 @@ export class EsimService {
     return this.esimRepository.updateStatus(id, EsimStatus.DELETED);
   }
 
-  async deleteEsim(userId: number, esimId: number): Promise<{ message: string }> {
+  async deleteEsim(
+    userId: number,
+    esimId: number,
+  ): Promise<{ message: string }> {
     this.assertValidEsimId(esimId);
     const esim = await this.esimRepository.findByIdWithOffer(esimId);
 
@@ -210,7 +360,9 @@ export class EsimService {
 
     const dataRemaining = (esim.dataTotal ?? 0) - (esim.dataUsed ?? 0);
     if (esim.status === EsimStatus.ACTIVE && dataRemaining > 0) {
-      throw new BadRequestException('Cannot delete an active eSIM with remaining data');
+      throw new BadRequestException(
+        'Cannot delete an active eSIM with remaining data',
+      );
     }
 
     await this.esimRepository.softDelete(esimId);
@@ -218,12 +370,495 @@ export class EsimService {
   }
 
   private toResponseDto(esim: any): EsimResponseDto {
-    return plainToInstance(EsimResponseDto, esim, { excludeExtraneousValues: true });
+    return plainToInstance(EsimResponseDto, esim, {
+      excludeExtraneousValues: true,
+    });
   }
 
-  private assertValidEsimId(id: number) {
+  private assertValidEsimId(id: number): void {
     if (!Number.isInteger(id) || id <= 0) {
       throw new BadRequestException('Invalid eSIM id');
     }
+  }
+
+  // ─── Activation state machine ────────────────────────────────────────────
+
+  async requestActivation(
+    esimId: number,
+    params: {
+      userId: number;
+      transactionId: number;
+      providerCode: string;
+    },
+  ): Promise<Esim> {
+    const targetStatus = EsimStatus.PENDING;
+    let isIdempotent = false;
+
+    const esim = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+
+        const [locked] = await tx.$queryRaw<any[]>`
+          SELECT * FROM "Esim" WHERE id = ${esimId} FOR UPDATE
+        `;
+
+        if (!locked) {
+          throw new NotFoundException(`eSIM ${esimId} not found`);
+        }
+
+        const currentStatus = locked.status as EsimStatus;
+
+        if (currentStatus === targetStatus) {
+          isIdempotent = true;
+          return tx.esim.findUnique({ where: { id: esimId } });
+        }
+
+        if (currentStatus === EsimStatus.DELETED) {
+          throw new BadRequestException(
+            `eSIM ${esimId} is deleted and cannot be transitioned`,
+          );
+        }
+
+        try {
+          assertValidEsimTransition(currentStatus, targetStatus, esimId);
+        } catch (error) {
+          await this.auditLogService.log({
+            layer: AuditLayer.ACTIVATION,
+            event: SystemEvent.ILLEGAL_TRANSITION_ATTEMPTED,
+            fromStatus: String(currentStatus),
+            toStatus: String(targetStatus),
+            statusDomain: statusDomain.ESIM,
+            triggeredBy: AuditTrigger.SYSTEM,
+            trigger: undefined,
+            userId: params.userId,
+            transactionId: params.transactionId,
+            attemptNumber: undefined,
+            providerCode: params.providerCode ?? undefined,
+            message: `Invalid transition: ${currentStatus} → ${targetStatus}`,
+            details: { esimId },
+          });
+          throw error;
+        }
+
+        return tx.esim.update({
+          where: { id: esimId },
+          data: { status: targetStatus },
+        });
+      },
+      { timeout: 10000 },
+    );
+
+    if (isIdempotent) {
+      return esim as Esim;
+    }
+
+    await this.auditLogService.log({
+      layer: AuditLayer.ACTIVATION,
+      event: SystemEvent.ACTIVATION_REQUESTED,
+      fromStatus: String(EsimStatus.NOT_ACTIVE),
+      toStatus: String(targetStatus),
+      statusDomain: statusDomain.ESIM,
+      triggeredBy: AuditTrigger.SYSTEM,
+      trigger: undefined,
+      userId: params.userId,
+      transactionId: params.transactionId,
+      attemptNumber: undefined,
+      providerCode: params.providerCode,
+      message: undefined,
+      details: null,
+    });
+
+    return esim as Esim;
+  }
+
+  async startProcessing(
+    esimId: number,
+    params: {
+      userId: number;
+      transactionId: number;
+      providerRequestId: string;
+      attemptNumber: number;
+      providerCode: string;
+    },
+  ): Promise<Esim> {
+    const targetStatus = EsimStatus.PROCESSING;
+    let isIdempotent = false;
+
+    const esim = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+
+        const [locked] = await tx.$queryRaw<any[]>`
+          SELECT * FROM "Esim" WHERE id = ${esimId} FOR UPDATE
+        `;
+
+        if (!locked) {
+          throw new NotFoundException(`eSIM ${esimId} not found`);
+        }
+
+        const currentStatus = locked.status as EsimStatus;
+
+        if (currentStatus === targetStatus) {
+          isIdempotent = true;
+          return tx.esim.findUnique({ where: { id: esimId } });
+        }
+
+        if (currentStatus === EsimStatus.DELETED) {
+          throw new BadRequestException(
+            `eSIM ${esimId} is deleted and cannot be transitioned`,
+          );
+        }
+
+        try {
+          assertValidEsimTransition(currentStatus, targetStatus, esimId);
+        } catch (error) {
+          await this.auditLogService.log({
+            layer: AuditLayer.ACTIVATION,
+            event: SystemEvent.ILLEGAL_TRANSITION_ATTEMPTED,
+            fromStatus: String(currentStatus),
+            toStatus: String(targetStatus),
+            statusDomain: statusDomain.ESIM,
+            triggeredBy: AuditTrigger.WORKER,
+            trigger: params.providerRequestId,
+            userId: params.userId,
+            transactionId: params.transactionId,
+            attemptNumber: params.attemptNumber,
+            providerCode: params.providerCode,
+            message: `Invalid transition: ${currentStatus} → ${targetStatus}`,
+            details: { esimId },
+          });
+          throw error;
+        }
+
+        return tx.esim.update({
+          where: { id: esimId },
+          data: { status: targetStatus },
+        });
+      },
+      { timeout: 10000 },
+    );
+
+    if (isIdempotent) {
+      return esim as Esim;
+    }
+
+    await this.auditLogService.log({
+      layer: AuditLayer.ACTIVATION,
+      event: SystemEvent.ACTIVATION_PROCESSING,
+      fromStatus: String(EsimStatus.PENDING),
+      toStatus: String(targetStatus),
+      statusDomain: statusDomain.ESIM,
+      triggeredBy: AuditTrigger.WORKER,
+      trigger: params.providerRequestId,
+      userId: params.userId,
+      transactionId: params.transactionId,
+      attemptNumber: params.attemptNumber,
+      providerCode: params.providerCode,
+      message: undefined,
+      details: null,
+    });
+
+    return esim as Esim;
+  }
+
+  async markActivationSuccess(
+    esimId: number,
+    params: {
+      userId: number;
+      transactionId: number;
+      providerRequestId: string;
+      attemptNumber: number;
+      durationMs: number;
+      providerCode: string;
+      providerLatencyMs?: number;
+    },
+  ): Promise<Esim> {
+    const targetStatus = EsimStatus.ACTIVE;
+    let isIdempotent = false;
+
+    const esim = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+
+        const [locked] = await tx.$queryRaw<any[]>`
+          SELECT * FROM "Esim" WHERE id = ${esimId} FOR UPDATE
+        `;
+
+        if (!locked) {
+          throw new NotFoundException(`eSIM ${esimId} not found`);
+        }
+
+        const currentStatus = locked.status as EsimStatus;
+
+        if (currentStatus === targetStatus) {
+          isIdempotent = true;
+          return tx.esim.findUnique({ where: { id: esimId } });
+        }
+
+        if (currentStatus === EsimStatus.DELETED) {
+          throw new BadRequestException(
+            `eSIM ${esimId} is deleted and cannot be transitioned`,
+          );
+        }
+
+        try {
+          assertValidEsimTransition(currentStatus, targetStatus, esimId);
+        } catch (error) {
+          await this.auditLogService.log({
+            layer: AuditLayer.ACTIVATION,
+            event: SystemEvent.ILLEGAL_TRANSITION_ATTEMPTED,
+            fromStatus: String(currentStatus),
+            toStatus: String(targetStatus),
+            statusDomain: statusDomain.ESIM,
+            triggeredBy: AuditTrigger.WORKER,
+            trigger: params.providerRequestId,
+            userId: params.userId,
+            transactionId: params.transactionId,
+            attemptNumber: params.attemptNumber,
+            providerCode: params.providerCode,
+            message: `Invalid transition: ${currentStatus} → ${targetStatus}`,
+            details: { esimId },
+          });
+          throw error;
+        }
+
+        return tx.esim.update({
+          where: { id: esimId },
+          data: { status: targetStatus, activatedAt: new Date() },
+        });
+      },
+      { timeout: 10000 },
+    );
+
+    if (isIdempotent) {
+      return esim as Esim;
+    }
+
+    await this.auditLogService.log({
+      layer: AuditLayer.ACTIVATION,
+      event: SystemEvent.ACTIVATION_SUCCESS,
+      fromStatus: String(EsimStatus.PROCESSING),
+      toStatus: String(targetStatus),
+      statusDomain: statusDomain.ESIM,
+      triggeredBy: AuditTrigger.WORKER,
+      trigger: params.providerRequestId,
+      userId: params.userId,
+      transactionId: params.transactionId,
+      attemptNumber: params.attemptNumber,
+      startedAt: Date.now() - params.durationMs,
+      providerLatencyMs: params.providerLatencyMs ?? undefined,
+      providerCode: params.providerCode,
+      message: undefined,
+      details: null,
+    });
+
+    return esim as Esim;
+  }
+
+  async markActivationFailure(
+    esimId: number,
+    params: {
+      userId: number;
+      transactionId: number;
+      providerRequestId: string;
+      attemptNumber: number;
+      errorCode?: string;
+      errorMessage?: string;
+      durationMs: number;
+      providerCode: string;
+      isFinalAttempt: boolean;
+    },
+  ): Promise<Esim> {
+    const targetStatus = EsimStatus.FAILED;
+    let skipAuditLog = false;
+
+    const esim = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+
+        const [locked] = await tx.$queryRaw<any[]>`
+          SELECT * FROM "Esim" WHERE id = ${esimId} FOR UPDATE
+        `;
+
+        if (!locked) {
+          throw new NotFoundException(`eSIM ${esimId} not found`);
+        }
+
+        if (!params.isFinalAttempt) {
+          // Non-final attempt — keep PROCESSING, no status change
+          return tx.esim.findUnique({ where: { id: esimId } });
+        }
+
+        const currentStatus = locked.status as EsimStatus;
+
+        if (currentStatus === targetStatus) {
+          skipAuditLog = true;
+          return tx.esim.findUnique({ where: { id: esimId } });
+        }
+
+        if (currentStatus === EsimStatus.DELETED) {
+          throw new BadRequestException(
+            `eSIM ${esimId} is deleted and cannot be transitioned`,
+          );
+        }
+
+        try {
+          assertValidEsimTransition(currentStatus, targetStatus, esimId);
+        } catch (error) {
+          await this.auditLogService.log({
+            layer: AuditLayer.ACTIVATION,
+            event: SystemEvent.ILLEGAL_TRANSITION_ATTEMPTED,
+            fromStatus: String(currentStatus),
+            toStatus: String(targetStatus),
+            statusDomain: statusDomain.ESIM,
+            triggeredBy: AuditTrigger.WORKER,
+            trigger: params.providerRequestId,
+            userId: params.userId,
+            transactionId: params.transactionId,
+            attemptNumber: params.attemptNumber,
+            providerCode: params.providerCode,
+            message: `Invalid transition: ${currentStatus} → ${targetStatus}`,
+            details: { esimId },
+          });
+          throw error;
+        }
+
+        return tx.esim.update({
+          where: { id: esimId },
+          data: { status: targetStatus },
+        });
+      },
+      { timeout: 10000 },
+    );
+
+    if (!skipAuditLog) {
+      await this.auditLogService.log({
+        layer: AuditLayer.ACTIVATION,
+        event: SystemEvent.ACTIVATION_FAILED,
+        fromStatus: String(EsimStatus.PROCESSING),
+        toStatus: params.isFinalAttempt
+          ? String(targetStatus)
+          : String(EsimStatus.PROCESSING),
+        statusDomain: statusDomain.ESIM,
+        triggeredBy: AuditTrigger.WORKER,
+        trigger: params.providerRequestId,
+        userId: params.userId,
+        transactionId: params.transactionId,
+        attemptNumber: params.attemptNumber,
+        startedAt: Date.now() - params.durationMs,
+        providerLatencyMs: undefined,
+        providerCode: params.providerCode,
+        message: params.errorMessage ?? undefined,
+        details: {
+          errorCode: params.errorCode ?? null,
+          errorMessage: params.errorMessage ?? null,
+          isFinalAttempt: params.isFinalAttempt,
+        },
+      });
+    }
+
+    return esim as Esim;
+  }
+
+  async markTimeout(
+    esimId: number,
+    params: {
+      userId: number;
+      transactionId: number;
+      providerRequestId: string;
+      attemptNumber: number;
+      durationMs: number;
+      providerCode: string;
+      isFinalAttempt: boolean;
+    },
+  ): Promise<Esim> {
+    const targetStatus = EsimStatus.FAILED;
+    let skipAuditLog = false;
+
+    const esim = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+
+        const [locked] = await tx.$queryRaw<any[]>`
+          SELECT * FROM "Esim" WHERE id = ${esimId} FOR UPDATE
+        `;
+
+        if (!locked) {
+          throw new NotFoundException(`eSIM ${esimId} not found`);
+        }
+
+        if (!params.isFinalAttempt) {
+          // Non-final timeout — keep PROCESSING, no status change
+          return tx.esim.findUnique({ where: { id: esimId } });
+        }
+
+        const currentStatus = locked.status as EsimStatus;
+
+        if (currentStatus === targetStatus) {
+          skipAuditLog = true;
+          return tx.esim.findUnique({ where: { id: esimId } });
+        }
+
+        if (currentStatus === EsimStatus.DELETED) {
+          throw new BadRequestException(
+            `eSIM ${esimId} is deleted and cannot be transitioned`,
+          );
+        }
+
+        try {
+          assertValidEsimTransition(currentStatus, targetStatus, esimId);
+        } catch (error) {
+          await this.auditLogService.log({
+            layer: AuditLayer.ACTIVATION,
+            event: SystemEvent.ILLEGAL_TRANSITION_ATTEMPTED,
+            fromStatus: String(currentStatus),
+            toStatus: String(targetStatus),
+            statusDomain: statusDomain.ESIM,
+            triggeredBy: AuditTrigger.WORKER,
+            trigger: params.providerRequestId,
+            userId: params.userId,
+            transactionId: params.transactionId,
+            attemptNumber: params.attemptNumber,
+            providerCode: params.providerCode,
+            message: `Invalid transition: ${currentStatus} → ${targetStatus}`,
+            details: { esimId },
+          });
+          throw error;
+        }
+
+        return tx.esim.update({
+          where: { id: esimId },
+          data: { status: targetStatus },
+        });
+      },
+      { timeout: 10000 },
+    );
+
+    if (!skipAuditLog) {
+      await this.auditLogService.log({
+        layer: AuditLayer.ACTIVATION,
+        event: SystemEvent.PROVIDER_TIMEOUT,
+        fromStatus: String(EsimStatus.PROCESSING),
+        toStatus: params.isFinalAttempt
+          ? String(targetStatus)
+          : String(EsimStatus.PROCESSING),
+        statusDomain: statusDomain.ESIM,
+        triggeredBy: AuditTrigger.WORKER,
+        trigger: params.providerRequestId,
+        userId: params.userId,
+        transactionId: params.transactionId,
+        attemptNumber: params.attemptNumber,
+        startedAt: Date.now() - params.durationMs,
+        providerLatencyMs: undefined,
+        providerCode: params.providerCode,
+        message: undefined,
+        details: {
+          isFinalAttempt: params.isFinalAttempt,
+          timedOutAfterMs: params.durationMs,
+        },
+      });
+    }
+
+    return esim as Esim;
   }
 }

@@ -27,7 +27,6 @@ type AuthContextValue = {
 };
 
 type AuthAction =
-  | { type: 'BOOTSTRAP_START' }
   | { type: 'LOGIN_SUCCESS'; payload: User }
   | { type: 'LOGOUT' };
 
@@ -38,11 +37,6 @@ const initialState: AuthState = {
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
-    case 'BOOTSTRAP_START':
-      return {
-        ...state,
-        isLoading: true,
-      };
     case 'LOGIN_SUCCESS':
       return {
         user: action.payload,
@@ -70,8 +64,6 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   }, []);
 
   const bootstrap = useCallback(async () => {
-    dispatch({ type: 'BOOTSTRAP_START' });
-
     const accessToken = await tokenStorage.getAccessToken();
     if (!accessToken) {
       dispatch({ type: 'LOGOUT' });

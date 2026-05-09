@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
-import { useChangePassword } from '../../hooks/useProfile';
+import { useChangePassword } from '../../hooks/client/useProfile';
 import type { ProfileStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../theme';
 

@@ -21,4 +21,12 @@ id?: number ;
 @IsOptional()
 @IsString()
 iccid?: string ;
+@ApiProperty({
+  type: 'integer',
+  format: 'int32',
+  required: false,
+})
+@IsOptional()
+@IsInt()
+transactionId?: number ;
 }

@@ -1,8 +1,8 @@
 import {
   Controller,
   Get,
-  Post,
   Delete,
+  Post,
   Param,
   Req,
   UseGuards,
@@ -33,7 +33,9 @@ export class EsimController {
   constructor(private readonly esimService: EsimService) {}
 
   @Get('destinations')
-  @ApiOperation({ summary: 'Get available destinations aggregated from offers' })
+  @ApiOperation({
+    summary: 'Get available destinations aggregated from offers',
+  })
   @ApiResponse({ status: 200, type: [DestinationResponseDto] })
   getDestinations() {
     return this.esimService.getDestinations();
@@ -41,9 +43,15 @@ export class EsimController {
 
   @Get('my-esims')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get authenticated user eSIMs grouped by status (legacy path)' })
+  @ApiOperation({
+    summary: 'Get authenticated user eSIMs grouped by status (legacy path)',
+  })
   @ApiResponse({ status: 200, type: EsimListResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   getMyEsimsLegacy(@Req() req: Request) {
     return this.esimService.getUserEsims((req.user as any).userId);
   }
@@ -52,7 +60,11 @@ export class EsimController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get authenticated user eSIMs grouped by status' })
   @ApiResponse({ status: 200, type: EsimListResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   getUserEsims(@Req() req: Request) {
     return this.esimService.getUserEsims((req.user as any).userId);
   }
@@ -62,9 +74,21 @@ export class EsimController {
   @ApiOperation({ summary: 'Get an eSIM by id for authenticated user' })
   @ApiParam({ name: 'id', type: Number, example: 77 })
   @ApiResponse({ status: 200, type: EsimResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
-  @ApiResponse({ status: 403, description: 'Forbidden', type: ErrorResponseDto })
-  @ApiResponse({ status: 404, description: 'eSIM not found', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'eSIM not found',
+    type: ErrorResponseDto,
+  })
   getEsimById(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
     return this.esimService.getEsimById((req.user as any).userId, id);
   }
@@ -74,8 +98,16 @@ export class EsimController {
   @ApiOperation({ summary: 'Sync eSIM usage data from provider' })
   @ApiParam({ name: 'id', type: Number, example: 77 })
   @ApiResponse({ status: 201, type: EsimResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
-  @ApiResponse({ status: 404, description: 'eSIM not found', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'eSIM not found',
+    type: ErrorResponseDto,
+  })
   syncUsage(@Param('id', ParseIntPipe) id: number) {
     return this.esimService.syncUsage(id);
   }
@@ -85,10 +117,26 @@ export class EsimController {
   @ApiOperation({ summary: 'Soft-delete an eSIM owned by authenticated user' })
   @ApiParam({ name: 'id', type: Number, example: 77 })
   @ApiResponse({ status: 200, type: EsimMessageResponseDto })
-  @ApiResponse({ status: 400, description: 'Cannot delete active eSIM with remaining data', type: ErrorResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
-  @ApiResponse({ status: 403, description: 'Forbidden', type: ErrorResponseDto })
-  @ApiResponse({ status: 404, description: 'eSIM not found', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot delete active eSIM with remaining data',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'eSIM not found',
+    type: ErrorResponseDto,
+  })
   deleteEsim(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
     return this.esimService.deleteEsim((req.user as any).userId, id);
   }

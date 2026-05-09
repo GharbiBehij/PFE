@@ -22,6 +22,14 @@ paymentProvider?: string ;
 @IsString()
 providerRefId?: string ;
 @ApiProperty({
+  type: 'string',
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+@IsString()
+gatewayPaymentId?: string  | null;
+@ApiProperty({
   type: 'integer',
   format: 'int32',
   required: false,
@@ -43,4 +51,27 @@ status?: string ;
 })
 @IsOptional()
 rawResponse?: Prisma.InputJsonValue  | Prisma.NullableJsonNullValueInput;
+@ApiProperty({
+  type: () => Object,
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+rawPayload?: Prisma.InputJsonValue  | Prisma.NullableJsonNullValueInput;
+@ApiProperty({
+  type: 'string',
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+@IsString()
+paymentUrl?: string  | null;
+@ApiProperty({
+  type: 'string',
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+@IsString()
+clientSecret?: string  | null;
 }

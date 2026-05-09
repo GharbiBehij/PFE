@@ -1,5 +1,5 @@
 
-import {EsimEventStatus,EsimStatus} from '@prisma/client'
+import {EsimStatus} from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 
 
@@ -22,11 +22,6 @@ activationCode: string ;
   enumName: 'EsimStatus',
 })
 status: EsimStatus ;
-@ApiProperty({
-  enum: EsimEventStatus,
-  enumName: 'EsimEventStatus',
-})
-event: EsimEventStatus ;
 @ApiProperty({
   type: 'string',
   nullable: true,

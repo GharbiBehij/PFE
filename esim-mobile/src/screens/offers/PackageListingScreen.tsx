@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { PrimaryButton } from '../../components/Cards/PrimaryCard';
 import Animated, {
   FadeInDown,
   FadeOut,
@@ -15,12 +15,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Group,
   ScreenContent,
-  ScreenFooter,
   ScreenHeader,
   ScreenShell,
   Section,
 } from '../../components/layout';
-import { useOffersByCountry } from '../../hooks/useOffers';
+import { PackageCard } from '../../components/Cards/PackageCard';
+import { useOffersByCountry } from '../../hooks/client/useOffers';
 import type { HomeStackParamList } from '../../navigation/types';
 import {
   Animation,
@@ -36,27 +36,18 @@ import {
 import type { Offer } from '../../types/offer';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'PackageListing'>;
-type PlanType = 'standard' | 'unlimited';
+type PlanType = 'standard' | 'Illimité';
 
 const DATA_THRESHOLD_MB = 25_000;
 
 export const PackageListingScreen = ({ navigation, route }: Props) => {
-  const { countryId, heroCountry } = route.params;
+  const { countryId, heroCountry, coverageType } = route.params;
   const insets = useSafeAreaInsets();
-  const offersQuery = useOffersByCountry(countryId);
+  const offersQuery = useOffersByCountry(countryId, coverageType);
 
   const [planType, setPlanType] = useState<PlanType>('standard');
-  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  const [selectedOfferId, setSelectedOfferId] = useState<number | null>(null);
   const [toggleDirection, setToggleDirection] = useState<'left' | 'right'>('right');
-
-  useFocusEffect(
-    useCallback(() => {
-      navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-      return () => {
-        navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-      };
-    }, [navigation]),
-  );
 
   const filteredOffers = useMemo(() => {
     const offers = offersQuery.data ?? [];
@@ -73,18 +64,17 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
     [groupedByDays],
   );
 
-  const bestValueOfferId = useMemo<string | null>(() => {
+  const bestValueOfferId = useMemo<number | null>(() => {
     const bestOffer = findBestValueOffer(filteredOffers);
     return bestOffer ? bestOffer.id : null;
   }, [filteredOffers]);
 
-  const isBottomActionsVisible = Boolean(selectedOfferId);
+  const isBottomActionsVisible = selectedOfferId !== null;
 
   useEffect(() => {
     if (!selectedOfferId) {
       return;
     }
-
     const stillVisible = filteredOffers.some((offer) => offer.id === selectedOfferId);
     if (!stillVisible) {
       setSelectedOfferId(null);
@@ -97,23 +87,22 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
     if (nextPlan === planType) {
       return;
     }
-
-    setToggleDirection(nextPlan === 'unlimited' ? 'right' : 'left');
+    setToggleDirection(nextPlan === 'Illimité' ? 'right' : 'left');
     setPlanType(nextPlan);
   };
 
   const handleViewDetails = () => {
-    if (!selectedOfferId) {
+    if (selectedOfferId === null) {
       return;
     }
-    navigation.navigate('PackageDetail', { packageId: selectedOfferId });
+    navigation.navigate('PackageDetail', { packageId: String(selectedOfferId) });
   };
 
   const handleBuyNow = () => {
-    if (!selectedOfferId) {
+    if (selectedOfferId === null) {
       return;
     }
-    navigation.navigate('Payment', { packageId: selectedOfferId });
+    navigation.navigate('Payment', { packageId: String(selectedOfferId) });
   };
 
   return (
@@ -175,10 +164,10 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
                   <Animated.View
                     entering={
                       toggleDirection === 'left'
-                        ? SlideInLeft.duration(Animation.duration.fast)
-                        : SlideInRight.duration(Animation.duration.fast)
+                        ? SlideInLeft.duration(Animation.duration.normal)
+                        : SlideInRight.duration(Animation.duration.normal)
                     }
-                    exiting={FadeOut.duration(Animation.duration.fast)}
+                    exiting={FadeOut.duration(Animation.duration.normal)}
                     style={styles.planActiveBackground}
                   />
                 ) : null}
@@ -188,25 +177,25 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
               </Pressable>
 
               <Pressable
-                accessibilityLabel="Afficher les forfaits unlimited"
+                accessibilityLabel="Afficher les forfaits illimités"
                 accessibilityRole="button"
-                accessibilityState={{ selected: planType === 'unlimited' }}
-                onPress={() => handlePlanChange('unlimited')}
+                accessibilityState={{ selected: planType === 'Illimité' }}
+                onPress={() => handlePlanChange('Illimité')}
                 style={styles.planOption}
               >
-                {planType === 'unlimited' ? (
+                {planType === 'Illimité' ? (
                   <Animated.View
                     entering={
                       toggleDirection === 'right'
-                        ? SlideInRight.duration(Animation.duration.fast)
-                        : SlideInLeft.duration(Animation.duration.fast)
+                        ? SlideInRight.duration(Animation.duration.normal)
+                        : SlideInLeft.duration(Animation.duration.normal)
                     }
-                    exiting={FadeOut.duration(Animation.duration.fast)}
+                    exiting={FadeOut.duration(Animation.duration.normal)}
                     style={styles.planActiveBackground}
                   />
                 ) : null}
-                <Text style={[styles.planText, planType === 'unlimited' ? styles.planTextActive : undefined]}>
-                  Unlimited
+                <Text style={[styles.planText, planType === 'Illimité' ? styles.planTextActive : undefined]}>
+                  Illimité
                 </Text>
               </Pressable>
             </View>
@@ -246,13 +235,13 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
               <Animated.View
                 entering={
                   toggleDirection === 'right'
-                    ? SlideInRight.duration(Animation.duration.fast)
-                    : SlideInLeft.duration(Animation.duration.fast)
+                    ? SlideInRight.duration(Animation.duration.normal)
+                    : SlideInLeft.duration(Animation.duration.normal)
                 }
                 exiting={
                   toggleDirection === 'right'
-                    ? SlideOutLeft.duration(Animation.duration.fast)
-                    : SlideOutRight.duration(Animation.duration.fast)
+                    ? SlideOutLeft.duration(Animation.duration.normal)
+                    : SlideOutRight.duration(Animation.duration.normal)
                 }
                 key={planType}
               >
@@ -267,57 +256,13 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
                       <Animated.View
                         entering={FadeInDown.delay(index * 30).duration(Animation.duration.normal)}
                         key={offer.id}
-                        style={index < groupedByDays[days].length - 1 ? styles.offerCardGap : undefined}
                       >
-                        <Pressable
-                          accessibilityLabel={`Choisir forfait ${formatData(offer.dataVolume)} ${offer.validityDays} jours`}
-                          accessibilityHint="Affiche les actions details et buy now en bas d'ecran"
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: selectedOfferId === offer.id }}
-                          onPressIn={() => setSelectedOfferId(offer.id)}
+                        <PackageCard
+                          offer={offer}
+                          selected={selectedOfferId === offer.id}
+                          isBestValue={offer.id === bestValueOfferId}
                           onPress={() => setSelectedOfferId(offer.id)}
-                          style={({ pressed }) => [
-                            styles.offerPressable,
-                            pressed ? styles.offerCardPressed : undefined,
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.offerCard,
-                              selectedOfferId === offer.id ? styles.offerCardSelected : undefined,
-                            ]}
-                          >
-                            <View style={styles.offerRow}>
-                              <View style={styles.offerFlagWrap}>
-                                <Ionicons
-                                  color={selectedOfferId === offer.id ? colors.primary.DEFAULT : colors.text.secondary}
-                                  name="cellular-outline"
-                                  size={sizes.icon.sm}
-                                />
-                              </View>
-
-                              <View style={styles.offerMainContent}>
-                                <Text numberOfLines={1} style={styles.offerData}>{formatData(offer.dataVolume)}</Text>
-                                <Text style={styles.offerMetaText}>{`${offer.validityDays} jours • 4G/5G`}</Text>
-                              </View>
-
-                              <View style={styles.offerPriceWrap}>
-                                <Text style={styles.offerPriceLabel}>A partir de</Text>
-                                <Text style={styles.offerPrice}>{formatPrice(offer.price, offer.currency)}</Text>
-                              </View>
-
-                              <View style={styles.offerChevronWrap}>
-                                <Ionicons color={colors.primary.DEFAULT} name="chevron-forward" size={sizes.icon.sm} />
-                              </View>
-                            </View>
-
-                            {offer.id === bestValueOfferId ? (
-                              <View style={styles.bestValueBadge}>
-                                <Text style={styles.bestValueText}>Meilleur</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        </Pressable>
+                        />
                       </Animated.View>
                     ))}
                   </Group>
@@ -328,50 +273,23 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
         </View>
       </ScreenContent>
 
-      {isBottomActionsVisible ? (
-        <View style={styles.stickyWrap}>
-          <ScreenFooter
-            style={[styles.bottomBar, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) }]}
-          >
-            <View style={styles.bottomRow}>
-              <View style={styles.bottomActionSlot}>
-                <Pressable
-                  accessibilityLabel="Voir les details du forfait"
-                  accessibilityRole="button"
-                  onPress={handleViewDetails}
-                  style={({ pressed }) => [
-                    styles.bottomActionContainer,
-                    styles.bottomActionContainerSecondary,
-                    styles.bottomButton,
-                    pressed ? styles.bottomButtonPressed : undefined,
-                  ]}
-                >
-                  <Text style={styles.bottomButtonTextSecondary}>Details</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.bottomActionSlot}>
-                <Pressable
-                  accessibilityLabel="Acheter le forfait selectionne"
-                  accessibilityRole="button"
-                  onPress={handleBuyNow}
-                  style={({ pressed }) => [
-                    styles.bottomActionContainer,
-                    styles.bottomActionContainerPrimary,
-                    styles.bottomButton,
-                    pressed ? styles.bottomButtonPressed : undefined,
-                  ]}
-                >
-                  <Text style={styles.bottomButtonTextPrimary}>Buy now</Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScreenFooter>
-        </View>
-      ) : null}
+{isBottomActionsVisible ? (
+  <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
+    <PrimaryButton
+      label="Détails"
+      onPress={handleViewDetails}
+    />
+    <PrimaryButton
+      label="Acheter maintenant"
+      onPress={handleBuyNow}
+    />
+  </View>
+) : null}
     </ScreenShell>
   );
 };
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 const groupOffersByDays = (offers: Offer[]) => {
   const grouped: Record<number, Offer[]> = {};
@@ -393,7 +311,6 @@ const findBestValueOffer = (offers: Offer[]): Offer | null => {
     if (dataMb <= 0) {
       return;
     }
-
     const ratio = offer.price / dataMb;
     if (ratio < bestRatio) {
       bestRatio = ratio;
@@ -406,50 +323,16 @@ const findBestValueOffer = (offers: Offer[]): Offer | null => {
 
 const parseDataVolumeToMb = (rawVolume: string) => {
   const value = rawVolume.trim().toUpperCase();
-
   if (value.includes('GB')) {
     const numeric = Number(value.replace('GB', '').trim());
     return Number.isFinite(numeric) ? numeric * 1024 : 0;
   }
-
   if (value.includes('MB')) {
     const numeric = Number(value.replace('MB', '').trim());
     return Number.isFinite(numeric) ? numeric : 0;
   }
-
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
-};
-
-const formatData = (rawVolume: string) => {
-  const normalized = rawVolume.trim().toUpperCase();
-
-  if (normalized.includes('GB') || normalized.includes('MB')) {
-    return normalized;
-  }
-
-  const value = Number(normalized);
-  if (!Number.isFinite(value)) {
-    return rawVolume;
-  }
-
-  if (value >= 1024) {
-    const gb = value / 1024;
-    return `${gb % 1 === 0 ? gb.toFixed(0) : gb.toFixed(1)}GB`;
-  }
-
-  return `${Math.round(value)}MB`;
-};
-
-const formatPrice = (price: number, currency?: string) => {
-  const safeCurrency = (currency && currency.trim()) || 'TND';
-  const amount = Number(price);
-
-  if (!Number.isFinite(amount)) {
-    return `0.00 ${safeCurrency}`;
-  }
-
-  return `${amount.toFixed(2)} ${safeCurrency}`;
 };
 
 const toTitleCase = (value: string) => {
@@ -459,6 +342,8 @@ const toTitleCase = (value: string) => {
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
     .join(' ');
 };
+
+// ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   headerShell: {
@@ -500,7 +385,6 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: spacing.xs,
   },
-
   scrollContent: {
     paddingTop: spacing.lg,
   },
@@ -510,16 +394,10 @@ const styles = StyleSheet.create({
   listSection: {
     marginBottom: spacing.xl,
   },
-
   planToggle: {
-    backgroundColor: colors.surfaceCard,
-    borderColor: colors.border,
     borderRadius: radii.card,
-    borderWidth: 1,
     flexDirection: 'row',
-    overflow: 'hidden',
     padding: spacing.xs,
-    ...shadows.low,
   },
   planOption: {
     alignItems: 'center',
@@ -534,23 +412,23 @@ const styles = StyleSheet.create({
   planActiveBackground: {
     backgroundColor: colors.primary.DEFAULT,
     borderRadius: radii.lg,
-    bottom: 0,
-    left: 0,
+    bottom: spacing.xs,
+    left: spacing.xs,
     position: 'absolute',
-    right: 0,
-    top: 0,
+    right: spacing.xs,
+    top: spacing.xs,
+    ...shadows.medium,
   },
   planText: {
     ...typography.bodyMD,
-    color: colors.text.secondary,
+    color: colors.primary.DEFAULT,
     fontWeight: '600',
     zIndex: 1,
   },
   planTextActive: {
-    color: colors.text.onPrimary,
+    color: colors.white,
     fontWeight: '700',
   },
-
   dayGroup: {
     marginBottom: spacing.xl,
   },
@@ -571,97 +449,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingLeft: spacing.xs,
   },
-
-  offerPressable: {
-    ...patterns.pressableBase,
-    marginBottom: spacing.md,
-  },
-  offerCardGap: {
-    marginBottom: spacing.md,
-  },
-  offerCard: {
-    ...patterns.card,
-    minHeight: sizes.card.minHeight,
-    padding: spacing.lg,
-  },
-  offerCardSelected: {
-    ...patterns.selectedBorder,
-    ...shadows.high,
-  },
-  offerCardPressed: {
-    ...patterns.pressablePressed,
-  },
-  offerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  offerFlagWrap: {
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    height: sizes.avatar.lg,
-    justifyContent: 'center',
-    width: sizes.avatar.lg,
-  },
-  offerMainContent: {
-    flex: 1,
-    marginLeft: spacing.sm,
-  },
-  offerData: {
-    ...typography.bodyLG,
-    color: colors.text.primary,
-    fontWeight: '700',
-  },
-  offerMetaText: {
-    ...typography.bodySM,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-  },
-  offerPriceWrap: {
-    alignItems: 'flex-end',
-    marginRight: spacing.sm,
-  },
-  offerPriceLabel: {
-    ...typography.bodySM,
-    color: colors.text.secondary,
-  },
-  offerPrice: {
-    ...typography.bodyMD,
-    color: colors.primary.DEFAULT,
-    fontWeight: '600',
-    marginTop: spacing.xs,
-  },
-  offerChevronWrap: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    height: sizes.avatar.sm,
-    justifyContent: 'center',
-    width: sizes.avatar.sm,
-  },
-  bestValueBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.full,
-    minHeight: sizes.badge.height,
-    minWidth: sizes.badge.minWidth,
-    paddingHorizontal: spacing.sm,
-    position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-  },
-  bestValueText: {
-    ...typography.bodySM,
-    color: colors.text.secondary,
-    fontWeight: '700',
-  },
-
   stateCard: {
     alignItems: 'center',
     backgroundColor: colors.surfaceCard,
@@ -695,71 +482,5 @@ const styles = StyleSheet.create({
   retryButtonText: {
     ...typography.labelMD,
     color: colors.text.onPrimary,
-  },
-
-  stickyWrap: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    zIndex: zIndex.sticky,
-  },
-  bottomBar: {
-    ...patterns.screenPadding,
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    paddingTop: spacing.sm,
-    ...shadows.medium,
-  },
-  bottomRow: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  bottomActionSlot: {
-    flex: 1,
-  },
-  bottomActionContainer: {
-    borderRadius: radii.md,
-    borderWidth: 2,
-    minHeight: sizes.button.minHeight,
-    overflow: 'hidden',
-    padding: spacing[0],
-    ...shadows.medium,
-  },
-  bottomActionContainerSecondary: {
-    backgroundColor: colors.surface,
-    borderColor: colors.primary.DEFAULT,
-  },
-  bottomActionContainerPrimary: {
-    backgroundColor: colors.secondary.DEFAULT,
-    borderColor: colors.secondary.dark,
-  },
-  bottomButton: {
-    alignItems: 'center',
-    borderRadius: radii.sm,
-    justifyContent: 'center',
-    minHeight: sizes.touch.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    width: '100%',
-  },
-  bottomButtonPressed: {
-    transform: [{ scale: 0.98 }],
-    ...shadows.low,
-  },
-  bottomButtonTextSecondary: {
-    ...typography.bodyMD,
-    color: colors.primary.DEFAULT,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  bottomButtonTextPrimary: {
-    ...typography.bodyMD,
-    color: colors.text.primary,
-    fontWeight: '700',
-    textAlign: 'center',
   },
 });

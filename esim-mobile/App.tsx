@@ -1,16 +1,22 @@
-import './global.css';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { NativeBaseProvider } from 'native-base';
 import { NavigationContainer } from '@react-navigation/native';
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { nativeBaseTheme } from './src/config/nativebase-theme';
 import { AuthProvider } from './src/context/AuthContext';
-import { RootNavigator } from './src/navigation/RootNavigator';
+import { RootNavigator } from './src/navigation/Client/RootNavigator';
+import { navigationRef } from './src/navigation/navigationRef';
+import { usePushNotifications } from './src/hooks/client/usePushNotifications';
 import { colors } from './src/theme';
+
+const styles = StyleSheet.create({
+  root: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+});
 
 export default function App() {
   const [queryClient] = useState(
@@ -28,24 +34,20 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <NativeBaseProvider theme={nativeBaseTheme}>
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-              <NavigationContainer>
-                <StatusBar style="dark" />
-                <RootNavigator />
-              </NavigationContainer>
-            </AuthProvider>
-          </QueryClientProvider>
-        </NativeBaseProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <NavigationContainer ref={navigationRef}>
+              <StatusBar style="dark" />
+              <AppContent />
+            </NavigationContainer>
+          </AuthProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    backgroundColor: colors.background,
-    flex: 1,
-  },
-});
+const AppContent = () => {
+  usePushNotifications();
+  return <RootNavigator />;
+};

@@ -123,6 +123,21 @@ export const patterns = {
   // ======================
   // FOOTERS
   // ======================
+actionBar: {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  backgroundColor: colors.surface,
+  borderTopColor: colors.border,
+  borderTopWidth: 1,
+  paddingHorizontal: spacing.xl,
+  paddingTop: spacing.md,
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: spacing.sm,
+  ...shadows.high,
+} as ViewStyle,
 
   stickyFooter: {
     position: 'absolute',

@@ -95,4 +95,15 @@ export const esimsApi = {
   remove: async (id: string) => {
     await apiClient.delete(`/esims/${id}`);
   },
+  getTopupOffers: async (esimId: string) => {
+    const response = await apiClient.get(`/esim/${esimId}/topup-offers`);
+    return response.data;
+  },
+  topupEsim: async (esimId: string, offerId: number, paymentMethod: string) => {
+    const response = await apiClient.post(`/esim/${esimId}/topup`, {
+      offerId,
+      paymentMethod,
+    });
+    return response.data;
+  },
 };

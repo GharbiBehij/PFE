@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { userService } from '../user/user.service';
@@ -6,19 +11,24 @@ import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { UserStatus } from '@prisma/client';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private userService: userService,
     private jwtService: JwtService,
-  ) { }
+    private readonly notificationService: NotificationService,
+  ) {}
 
   async login(dto: LoginDto) {
     const user = await this.userService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const passwordMatch = await bcrypt.compare(dto.password, user.hashedPassword);
+    const passwordMatch = await bcrypt.compare(
+      dto.password,
+      user.hashedPassword,
+    );
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
     if (user.status === UserStatus.OFFLINE) {
@@ -33,7 +43,15 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already used');
 
     const newUser = await this.userService.create({ ...dto });
-    return this.generateAndSaveTokens(newUser);
+    const tokens = await this.generateAndSaveTokens(newUser);
+
+    this.notificationService
+      .notifyUser(newUser.id, 'welcome', {
+        firstname: newUser.firstname,
+      })
+      .catch(() => {});
+
+    return tokens;
   }
 
   async logout(id: number) {
@@ -54,7 +72,10 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshDto) {
-    const isValid = await this.userService.validateRefreshToken(dto.id, dto.refreshToken);
+    const isValid = await this.userService.validateRefreshToken(
+      dto.id,
+      dto.refreshToken,
+    );
     if (!isValid) throw new UnauthorizedException('Invalid refresh token');
 
     const user = await this.userService.findById(dto.id);
@@ -98,6 +119,7 @@ export class AuthService {
       firstname: user.firstname,
       lastname: user.lastname,
       role: user.role,
+      status: user.status,
       balance: user.balance,
     };
   }

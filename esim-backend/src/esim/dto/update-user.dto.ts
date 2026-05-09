@@ -58,4 +58,12 @@ hashedRefreshToken?: string  | null;
 @IsOptional()
 @IsString()
 phone?: string  | null;
+@ApiProperty({
+  type: 'string',
+  required: false,
+  nullable: true,
+})
+@IsOptional()
+@IsString()
+pushToken?: string  | null;
 }

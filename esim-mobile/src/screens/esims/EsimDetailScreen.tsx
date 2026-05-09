@@ -5,7 +5,7 @@ import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { QrCodeCard } from '../../components/QrCodeCard';
 import { StatusBadge } from '../../components/StatusBadge';
 import { ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
-import { useDeleteEsim, useEsimDetail, useSyncEsim } from '../../hooks/useEsims';
+import { useDeleteEsim, useEsimDetail, useSyncEsim } from '../../hooks/client/useEsims';
 import type { EsimsStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
 import { formatDate } from '../../utils/formatDate';

@@ -1,5 +1,5 @@
 
-import {EsimEventStatus,EsimStatus} from '@prisma/client'
+import {EsimStatus} from '@prisma/client'
 import {ApiProperty} from '@nestjs/swagger'
 import {IsDateString,IsEnum,IsOptional,IsString} from 'class-validator'
 
@@ -29,14 +29,6 @@ activationCode?: string ;
 @IsOptional()
 @IsEnum(EsimStatus)
 status?: EsimStatus ;
-@ApiProperty({
-  enum: EsimEventStatus,
-  enumName: 'EsimEventStatus',
-  required: false,
-})
-@IsOptional()
-@IsEnum(EsimEventStatus)
-event?: EsimEventStatus ;
 @ApiProperty({
   type: 'string',
   required: false,

@@ -1,28 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useLayoutEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
-import { ScreenContent, ScreenFooter, ScreenHeader, ScreenShell } from '../../components/layout';
-import { useOfferDetail } from '../../hooks/useOffers';
+import { PrimaryButton } from '../../components/Cards/PrimaryCard';
+import { ScreenContent, ScreenHeader, ScreenShell } from '../../components/layout';
+import { useOfferDetail } from '../../hooks/client/useOffers';
 import type { HomeStackParamList } from '../../navigation/types';
-import { colors, patterns, radii, shadows, sizes, spacing, typography, zIndex } from '../../theme';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'PackageDetail'>;
 
 export const PackageDetailScreen = ({ navigation, route }: Props) => {
   const { packageId } = route.params;
   const insets = useSafeAreaInsets();
-
-  useLayoutEffect(() => {
-    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => {
-      navigation.getParent()?.setOptions({ tabBarStyle: undefined });
-    };
-  }, [navigation]);
   const offerQuery = useOfferDetail(packageId);
 
   if (offerQuery.isLoading) {
@@ -40,7 +33,10 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
       <ScreenShell>
         <ScreenContent scrollable={false}>
           <View style={styles.centeredState}>
-            <ErrorBanner message="Impossible de charger les détails du forfait." onRetry={() => offerQuery.refetch()} />
+            <ErrorBanner
+              message="Impossible de charger les détails du forfait."
+              onRetry={() => offerQuery.refetch()}
+            />
           </View>
         </ScreenContent>
       </ScreenShell>
@@ -52,43 +48,40 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
   return (
     <ScreenShell>
       <ScreenHeader style={styles.headerShell}>
-        <LinearGradient
-          colors={[colors.surface, colors.primary[50]]}
-          end={{ x: 1, y: 1 }}
-          start={{ x: 0, y: 0 }}
-          style={styles.header}
-        >
-          <View style={styles.headerTopRow}>
-            <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.headerIconButton, pressed ? styles.headerIconButtonPressed : undefined]}>
-              <Ionicons color={colors.text.primary} name="arrow-back" size={sizes.icon.md} />
-            </Pressable>
+        <View style={styles.headerTopRow}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [styles.headerIconButton, pressed ? styles.headerIconButtonPressed : undefined]}
+          >
+            <Ionicons color={colors.text.primary} name="arrow-back" size={sizes.icon.md} />
+          </Pressable>
 
-            <View style={styles.headerTitleWrap}>
-              <Text style={styles.headerTitle}>Détails du forfait</Text>
-              <Text style={styles.headerSubtitle}>{offer.country}</Text>
-            </View>
-
-            <View style={styles.headerRightSpacer} />
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTitle}>Détails du forfait</Text>
+            <Text style={styles.headerSubtitle}>{offer.country}</Text>
           </View>
-        </LinearGradient>
+
+          <View style={styles.headerRightSpacer} />
+        </View>
       </ScreenHeader>
 
-      <ScreenContent contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={[colors.primary.DEFAULT, colors.primary.dark]} end={{ x: 1, y: 1 }} start={{ x: 0, y: 0 }} style={styles.gradientCard}>
+      <ScreenContent
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <LinearGradient
+          colors={[colors.primary.DEFAULT, colors.primary.dark]}
+          end={{ x: 1, y: 1 }}
+          start={{ x: 0, y: 0 }}
+          style={styles.gradientCard}
+        >
           <View style={styles.gradientTopRow}>
             <Ionicons color={colors.text.onPrimary} name="globe-outline" size={sizes.icon.lg} />
             <Text style={styles.gradientCountry}>{offer.country.toUpperCase()}</Text>
           </View>
-
           <Text style={styles.gradientData}>{formatData(offer.dataVolume)}</Text>
-
           <View style={styles.validityBadge}>
             <Text style={styles.validityText}>{formatDays(offer.validityDays)}</Text>
-          </View>
-
-          <View style={styles.gradientFooter}>
-            <Text style={styles.gradientPriceLabel}>Prix total</Text>
-            <Text style={styles.gradientPrice}>{formatPrice(offer.price)} TND</Text>
           </View>
         </LinearGradient>
 
@@ -108,7 +101,10 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
             "Sans frais d'itinerance",
             'Support 24h/24 7j/7',
           ].map((feature, index, all) => (
-            <View key={feature} style={[styles.featureRow, index !== all.length - 1 ? styles.featureRowBorder : undefined]}>
+            <View
+              key={feature}
+              style={[styles.featureRow, index !== all.length - 1 ? styles.featureRowBorder : undefined]}
+            >
               <View style={styles.checkWrap}>
                 <Ionicons color={colors.success.DEFAULT} name="checkmark" size={sizes.icon.sm} />
               </View>
@@ -118,47 +114,34 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
         </View>
 
         <View style={styles.warningBox}>
-          <Ionicons color={colors.warning.DEFAULT} name="information-circle" size={sizes.icon.md} style={styles.warningIcon} />
+          <Ionicons
+            color={colors.warning.DEFAULT}
+            name="information-circle"
+            size={sizes.icon.md}
+            style={styles.warningIcon}
+          />
           <Text style={styles.warningText}>
             Votre forfait demarrera automatiquement lorsque vous vous connecterez au reseau.
           </Text>
         </View>
       </ScreenContent>
 
-      <ScreenFooter sticky style={[styles.footer, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
-        <View style={styles.priceBadge}>
-          <Text style={styles.priceBadgeText}>{formatPrice(offer.price)} TND</Text>
-        </View>
-
-        <Pressable onPress={() => navigation.navigate('Payment', { packageId: offer.id })} style={({ pressed }) => [styles.payCta, pressed ? styles.payCtaPressed : undefined]}>
-          <Text style={styles.payCtaText}>Continuer</Text>
-          <Ionicons color={colors.text.primary} name="arrow-forward" size={sizes.icon.md} />
-        </Pressable>
-      </ScreenFooter>
+      <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
+        <PrimaryButton
+          label="Continuer"
+          onPress={() => navigation.navigate('Payment', { packageId: String(offer.id) })}
+        />
+      </View>
     </ScreenShell>
   );
 };
 
-const formatPrice = (price: number) => {
-  const numeric = Number(price);
-  return Number.isFinite(numeric) ? numeric.toFixed(2) : '0.00';
-};
-
 const formatData = (dataVolume: string) => {
   const normalized = dataVolume.trim().toUpperCase();
-  if (normalized.includes('GB') || normalized.includes('MB')) {
-    return normalized;
-  }
-
+  if (normalized.includes('GB') || normalized.includes('MB')) return normalized;
   const numeric = Number(normalized);
-  if (!Number.isFinite(numeric)) {
-    return dataVolume;
-  }
-
-  if (numeric >= 1024) {
-    return `${(numeric / 1024).toFixed(numeric % 1024 === 0 ? 0 : 1)}GB`;
-  }
-
+  if (!Number.isFinite(numeric)) return dataVolume;
+  if (numeric >= 1024) return `${(numeric / 1024).toFixed(numeric % 1024 === 0 ? 0 : 1)}GB`;
   return `${Math.round(numeric)}MB`;
 };
 
@@ -174,15 +157,8 @@ const styles = StyleSheet.create({
   },
   headerShell: {
     ...patterns.headerShell,
-  },
-  header: {
-    borderBottomLeftRadius: radii.xxl,
-    borderBottomRightRadius: radii.xxl,
-    marginBottom: spacing[0],
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing[0],
-    paddingTop: spacing.xs,
-    ...shadows.medium,
+    borderBottomLeftRadius: radii.card,
+    borderBottomRightRadius: radii.card,
   },
   headerTopRow: {
     alignItems: 'center',
@@ -195,18 +171,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.full,
     borderWidth: 1,
-    height: sizes.avatar.md,
+    height: sizes.touch.sm,
     justifyContent: 'center',
-    width: sizes.avatar.md,
+    width: sizes.touch.sm,
   },
   headerIconButtonPressed: {
-    backgroundColor: colors.borderSubtle,
-    transform: [{ scale: 0.98 }],
-    ...shadows.low,
-  },
-  card: {
-    ...patterns.card,
-    padding: spacing.lg,
+    backgroundColor: colors.state.surfacePressed,
+    ...patterns.pressablePressed,
   },
   headerTitleWrap: {
     flex: 1,
@@ -222,17 +193,17 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   headerRightSpacer: {
-    width: sizes.avatar.md,
+    width: sizes.touch.sm,
   },
   scrollContent: {
     ...patterns.screenPadding,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.xxxxxl + spacing.xxl + spacing.sm + spacing.xs,
+    paddingBottom: spacing.xxxxxl + spacing.xxl,
   },
   gradientCard: {
     ...patterns.card,
     borderRadius: radii.xl,
-    borderWidth: spacing[0],
+    borderWidth: 0,
     marginBottom: spacing.xl,
     padding: spacing.xl,
     ...shadows.high,
@@ -268,21 +239,6 @@ const styles = StyleSheet.create({
     ...typography.labelMD,
     color: colors.primary.DEFAULT,
   },
-  gradientFooter: {
-    borderTopColor: colors.state.onPrimaryOverlay20,
-    borderTopWidth: 1,
-    paddingTop: spacing.md,
-  },
-  gradientPriceLabel: {
-    ...typography.bodyMD,
-    color: colors.text.onPrimary,
-  },
-  gradientPrice: {
-    ...typography.titleXL,
-    color: colors.text.onPrimary,
-    fontWeight: '800',
-    marginTop: spacing.xs,
-  },
   sectionHeader: {
     ...patterns.sectionHeaderRow,
   },
@@ -303,7 +259,7 @@ const styles = StyleSheet.create({
     color: colors.primary.DEFAULT,
     fontWeight: '700',
   },
-  featuresCard: {
+  card: {
     ...patterns.card,
     padding: spacing.lg,
   },
@@ -348,56 +304,5 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     flex: 1,
     marginLeft: spacing.sm,
-  },
-  footer: {
-    alignItems: 'center',
-    elevation: shadows.high.elevation,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    ...patterns.screenPadding,
-    paddingTop: spacing.md,
-    shadowColor: shadows.high.shadowColor,
-    shadowOffset: shadows.high.shadowOffset,
-    shadowOpacity: shadows.high.shadowOpacity,
-    shadowRadius: shadows.high.shadowRadius,
-    zIndex: zIndex.sticky,
-  },
-  priceBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.primary.DEFAULT,
-    borderRadius: radii.lg,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  priceBadgeText: {
-    ...typography.titleSM,
-    color: colors.text.onPrimary,
-    fontWeight: '800',
-  },
-  payCta: {
-    alignItems: 'center',
-    backgroundColor: colors.secondary.DEFAULT,
-    borderRadius: radii.lg,
-    elevation: shadows.secondaryGlow.elevation,
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    minHeight: sizes.button.minHeight,
-    paddingVertical: spacing.md,
-    shadowColor: shadows.secondaryGlow.shadowColor,
-    shadowOffset: shadows.secondaryGlow.shadowOffset,
-    shadowOpacity: shadows.secondaryGlow.shadowOpacity,
-    shadowRadius: shadows.secondaryGlow.shadowRadius,
-  },
-  payCtaPressed: {
-    backgroundColor: colors.secondary.dark,
-    transform: [{ scale: 0.98 }],
-    ...shadows.low,
-  },
-  payCtaText: {
-    ...typography.button,
-    color: colors.text.primary,
-    marginRight: spacing.sm,
   },
 });

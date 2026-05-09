@@ -46,6 +46,10 @@ popularity: string ;
 })
 coverageType: CoverageType ;
 @ApiProperty({
+  type: 'string',
+})
+networkType: string ;
+@ApiProperty({
   type: 'integer',
   format: 'int32',
 })

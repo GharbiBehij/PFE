@@ -27,13 +27,17 @@ export class EsimResponseDto {
 
   @ApiProperty({ example: 3920, description: 'Remaining data in MB' })
   @Expose()
-  @Transform(({ obj }) => Math.max(0, (obj.dataTotal ?? 0) - (obj.dataUsed ?? 0)))
+  @Transform(({ obj }) =>
+    Math.max(0, (obj.dataTotal ?? 0) - (obj.dataUsed ?? 0)),
+  )
   dataRemaining: number;
 
   @ApiProperty({ example: 23, description: 'Usage percentage from 0 to 100' })
   @Expose()
   @Transform(({ obj }) =>
-    obj.dataTotal > 0 ? Math.round(((obj.dataUsed ?? 0) / obj.dataTotal) * 100) : 0,
+    obj.dataTotal > 0
+      ? Math.round(((obj.dataUsed ?? 0) / obj.dataTotal) * 100)
+      : 0,
   )
   usagePercentage: number;
 

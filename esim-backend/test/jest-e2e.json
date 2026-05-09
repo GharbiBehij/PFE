@@ -5,5 +5,13 @@
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
-  }
+  },
+  "moduleNameMapper": {
+    "^prisma/(.*)$": "<rootDir>/../prisma/$1",
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^(\\./.*)\\.js$": "$1"
+  },
+  "globalSetup": "./setup/db-setup.ts",
+  "globalTeardown": "./setup/db-teardown.ts",
+  "testTimeout": 30000
 }

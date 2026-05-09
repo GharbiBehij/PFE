@@ -7,11 +7,13 @@ import { MockProviderAdapter } from './adapters/mock-provider.adapter';
 import { PROVIDER_ADAPTER } from './adapters/provider-adapter.token';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TransactionModule } from '../transaction/transaction.module';
+import { ProvisioningModule } from '../ProvisionningEvent/AuditLog.module';
 
 @Module({
   imports: [
     HttpModule,
     forwardRef(() => TransactionModule),
+    forwardRef(() => ProvisioningModule),
   ],
   controllers: [EsimController],
   providers: [

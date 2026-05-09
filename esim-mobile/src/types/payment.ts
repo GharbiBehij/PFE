@@ -1,14 +1,30 @@
 import type { Esim } from './esim';
 import type { Offer } from './offer';
 
-export type PaymentMethod = 'card' | 'apple_pay' | 'wallet';
-export type TransactionStatus = 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED';
+export type PaymentMethod = 'card' | 'apple_pay' | 'wallet' | 'cash';
+export type TransactionStatus =
+  | 'PENDING'
+  | 'PENDING_PAYMENT'
+  | 'PROCESSING'
+  | 'PAID'
+  | 'PROVISIONING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'SUCCEEDED'
+  | 'AUTHORIZED'
+  | 'EXPIRED'
+  | 'REFUNDED';
 
 export interface PurchaseResult {
-  transactionId: string;
-  status: TransactionStatus;
+  transactionId: number;
+  status?: TransactionStatus | 'FAILED';
+  channel?: 'B2C' | 'B2B2C';
+  paymentUrl?: string;
+  clientSecret?: string;
+  type?: 'REDIRECT' | 'INTENT';
   esimId?: string;
   message?: string;
+  error?: string;
 }
 
 export interface Transaction {
@@ -21,4 +37,6 @@ export interface Transaction {
   offer?: Offer;
   esim?: Esim;
   createdAt: string;
+  attemptNumber?: number | null;
+  durationMs?: number | null;
 }

@@ -4,9 +4,12 @@ import {ApiProperty} from '@nestjs/swagger'
 import {Transaction} from './transaction.entity'
 import {Payment} from './payment.entity'
 import {WalletTransaction} from './walletTransaction.entity'
+import {WalletAttempt} from './walletAttempt.entity'
 import {Esim} from './esim.entity'
 import {Segment} from './segment.entity'
 import {TopUpRequest} from './topUpRequest.entity'
+import {TopUpAttempt} from './topUpAttempt.entity'
+import {AuditLog} from './auditLog.entity'
 
 
 export class User {
@@ -62,6 +65,16 @@ status: UserStatus ;
 role: Role ;
 @ApiProperty({
   type: 'string',
+  nullable: true,
+})
+phone: string  | null;
+@ApiProperty({
+  type: 'string',
+  nullable: true,
+})
+pushToken: string  | null;
+@ApiProperty({
+  type: 'string',
   format: 'date-time',
 })
 createdAt: Date ;
@@ -89,6 +102,12 @@ payments?: Payment[] ;
 })
 walletTransactions?: WalletTransaction[] ;
 @ApiProperty({
+  type: () => WalletAttempt,
+  isArray: true,
+  required: false,
+})
+walletAttempts?: WalletAttempt[] ;
+@ApiProperty({
   type: () => Esim,
   isArray: true,
   required: false,
@@ -101,11 +120,6 @@ esims?: Esim[] ;
 })
 segment?: Segment[] ;
 @ApiProperty({
-  type: 'string',
-  nullable: true,
-})
-phone: string  | null;
-@ApiProperty({
   type: () => TopUpRequest,
   isArray: true,
   required: false,
@@ -117,4 +131,16 @@ salesmanTopUps?: TopUpRequest[] ;
   required: false,
 })
 reviewedTopUps?: TopUpRequest[] ;
+@ApiProperty({
+  type: () => TopUpAttempt,
+  isArray: true,
+  required: false,
+})
+topUpAttempts?: TopUpAttempt[] ;
+@ApiProperty({
+  type: () => AuditLog,
+  isArray: true,
+  required: false,
+})
+auditLogs?: AuditLog[] ;
 }

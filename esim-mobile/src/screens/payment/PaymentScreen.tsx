@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AuthWallModal } from '../../components/AuthWallModal';
 import { CountryFlag } from '../../components/CountryFlag';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { PaymentMethodTile } from '../../components/PaymentMethodTile';
+import { PrimaryButton } from '../../components/Cards/PrimaryCard';
 import { Group, ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
-import { useAuth } from '../../hooks/useAuth';
-import { useOfferDetail } from '../../hooks/useOffers';
-import { usePurchase } from '../../hooks/usePayment';
+import { useAuth } from '../../hooks/client/useAuth';
+import { useOfferDetail } from '../../hooks/client/useOffers';
+import { usePurchase } from '../../hooks/client/usePayment';
 import type { HomeStackParamList } from '../../navigation/types';
-import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../theme';
+import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
 import type { PaymentMethod } from '../../types/payment';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Payment'>;
@@ -19,9 +22,12 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'Payment'>;
 export const PaymentScreen = ({ navigation, route }: Props) => {
   const { packageId } = route.params;
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const offerQuery = useOfferDetail(packageId);
   const purchaseMutation = usePurchase();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [paymentState, setPaymentState] = useState<'idle' | 'loading' | 'paid' | 'error'>('idle');
+  const [showAuthWall, setShowAuthWall] = useState(false);
 
   if (offerQuery.isLoading) {
     return (
@@ -86,14 +92,68 @@ export const PaymentScreen = ({ navigation, route }: Props) => {
   };
 
   const onConfirmPayment = async () => {
+    if (!user) {
+      setShowAuthWall(true);
+      return;
+    }
+
+    if (paymentState !== 'idle') return;
+
+    setPaymentState('loading');
+
     try {
       const result = await purchaseMutation.mutateAsync({
         offerId: offer.id,
         paymentMethod,
       });
-      navigation.navigate('Success', { result });
-    } catch {}
+
+      const hasFailed =
+        result.status === 'FAILED' ||
+        result.message === 'PAYMENT_FAILED' ||
+        result.message === 'WALLET_FAILED' ||
+        result.message === 'QUEUE_FAILED';
+
+      if (hasFailed) {
+        setPaymentState('error');
+        return;
+      }
+
+      setPaymentState('paid');
+
+      const flowChannel: 'B2C' | 'B2B2C' =
+        paymentMethod === 'wallet' ? 'B2B2C' : 'B2C';
+
+      // ── REDIRECT flow — Stripe Checkout + Flouci + ClicToPay ──
+      // All B2C payments now use PaymentWebView regardless of gateway
+      if (flowChannel === 'B2C' && result.paymentUrl) {
+        navigation.navigate('PaymentWebView', {
+          paymentUrl: result.paymentUrl,
+          transactionId: result.transactionId,
+        });
+        return;
+      }
+
+      // ── B2B2C wallet flow ──────────────────────────────────────
+      navigation.navigate('ProcessingModal', {
+        transactionId: result.transactionId,
+        channel: 'B2B2C',
+      });
+    } catch {
+      setPaymentState('error');
+    }
   };
+
+  const buttonLabel: string = {
+    idle:    'Confirmer et payer',
+    loading: 'Traitement...',
+    paid:    'Redirection...',
+    error:   'Réessayer',
+  }[paymentState];
+
+  const buttonDisabled: boolean =
+    paymentState === 'loading' || paymentState === 'paid';
+
+  const buttonLoading: boolean = paymentState === 'loading';
 
   return (
     <ScreenShell>
@@ -172,38 +232,32 @@ export const PaymentScreen = ({ navigation, route }: Props) => {
               ))}
             </View>
 
-            <View>
-              <View style={styles.securityNote}>
-                <Ionicons name="lock-closed" size={sizes.icon.xs} color={colors.text.tertiary} />
-                <Text style={styles.securityText}>Paiements sécurisés et chiffrés</Text>
-              </View>
-
-              <Pressable
-                disabled={purchaseMutation.isPending}
-                onPress={onConfirmPayment}
-                style={({ pressed }) => [
-                  styles.payButton,
-                  pressed && !purchaseMutation.isPending ? styles.payButtonPressed : undefined,
-                  purchaseMutation.isPending && styles.payButtonDisabled,
-                ]}
-              >
-                {purchaseMutation.isPending ? (
-                  <>
-                    <ActivityIndicator color={colors.primary[900]} size="small" />
-                    <Text style={styles.payButtonText}>Traitement...</Text>
-                  </>
-                ) : (
-                  <Text style={styles.payButtonText}>Confirmer et payer</Text>
-                )}
-              </Pressable>
-
-              {purchaseMutation.isError && (
-                <ErrorBanner message="Le paiement a échoué. Veuillez réessayer." />
-              )}
+            <View style={styles.securityNote}>
+              <Ionicons name="lock-closed" size={sizes.icon.xs} color={colors.text.tertiary} />
+              <Text style={styles.securityText}>Paiements sécurisés et chiffrés</Text>
             </View>
+
+            {paymentState === 'error' && (
+              <ErrorBanner message="Le paiement a échoué. Veuillez réessayer." />
+            )}
           </Group>
         </Section>
       </ScreenContent>
+
+      <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
+        <PrimaryButton
+          containerStyle={paymentState === 'paid' ? styles.buttonPaid : undefined}
+          label={buttonLabel}
+          loading={buttonLoading}
+          disabled={buttonDisabled}
+          onPress={onConfirmPayment}
+        />
+      </View>
+
+      <AuthWallModal
+        visible={showAuthWall}
+        onClose={() => setShowAuthWall(false)}
+      />
     </ScreenShell>
   );
 };
@@ -216,32 +270,25 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     backgroundColor: colors.background,
   },
-
-  /* HEADER */
   header: {
     ...patterns.headerShell,
   },
-
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   headerTitleWrap: {
     flex: 1,
     alignItems: 'center',
   },
-
   headerTitle: {
     ...typography.titleMD,
     color: colors.text.primary,
     fontWeight: '700',
   },
-
   headerSpacer: {
     width: sizes.touch.sm,
   },
-
   iconButton: {
     ...patterns.unselectedBackground,
     ...patterns.unselectedBorder,
@@ -252,25 +299,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: -spacing.sm,
   },
-
   iconButtonPressed: {
     backgroundColor: colors.state.surfacePressed,
     transform: [{ scale: 0.98 }],
   },
-
-  /* CONTENT */
   content: {
     paddingTop: spacing.xl,
     ...patterns.screenPadding,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxxxxl + spacing.xl,
   },
-
   summaryCard: {
     ...patterns.summaryCard,
     padding: spacing.lg,
     marginBottom: spacing.xl,
   },
-
   summaryTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -280,63 +322,53 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-
   planLabel: {
     ...typography.overline,
     color: colors.text.tertiary,
     marginBottom: spacing.xs,
   },
-
   planTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-
   planTitle: {
     ...typography.titleSM,
     color: colors.text.primary,
     fontWeight: '700',
   },
-
   planSubtitle: {
     ...typography.bodySM,
     color: colors.text.secondary,
     marginTop: spacing.xs,
   },
-
   globeBadge: {
     backgroundColor: colors.primary[100],
     padding: spacing.md,
     borderRadius: radii.md,
   },
-
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-
   priceRowTaxes: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-
   priceLabel: {
     ...typography.bodySM,
     color: colors.text.secondary,
     fontWeight: '500',
   },
-
   priceValue: {
     ...typography.bodySM,
     color: colors.text.secondary,
     fontWeight: '500',
   },
-
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -345,75 +377,40 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-
   totalLabel: {
     ...typography.labelLG,
     color: colors.text.primary,
     fontWeight: '700',
   },
-
   totalValue: {
     ...typography.titleSM,
     color: colors.primary.DEFAULT,
     fontWeight: '700',
   },
-
-  /* SECTION */
   sectionHeader: {
     ...patterns.sectionHeaderRow,
   },
-
   sectionTitle: {
     ...typography.titleMD,
     color: colors.text.primary,
     fontWeight: '700',
   },
-
-  /* CARD */
   methodsWrap: {
     width: '100%',
-    alignItems: 'stretch',
     flexDirection: 'column',
   },
-
   securityNote: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'center',
     marginBottom: spacing.xl,
   },
-
   securityText: {
     ...typography.bodySM,
     color: colors.text.tertiary,
     marginLeft: spacing.sm,
   },
-
-  payButton: {
-    ...patterns.ctaPrimary,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    backgroundColor: colors.secondary.DEFAULT,
-    borderWidth: 1,
-    borderColor: colors.secondary.DEFAULT,
-    ...shadows.secondaryGlow,
-  },
-
-  payButtonDisabled: {
-    opacity: 0.8,
-  },
-
-  payButtonPressed: {
-    backgroundColor: colors.secondary.dark,
-    borderColor: colors.secondary.dark,
-    transform: [{ scale: 0.98 }],
-    ...shadows.low,
-  },
-
-  payButtonText: {
-    ...typography.button,
-    fontWeight: '700',
-    color: colors.primary[900],
-    textAlign: 'center',
+  buttonPaid: {
+    opacity: 0.5,
   },
 });
