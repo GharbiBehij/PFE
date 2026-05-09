@@ -41,4 +41,7 @@ export class CreateOfferDto {
 
   @ApiProperty({ example: 3 })
   providerId: number;
+
+  @ApiProperty({ example: 'FR', description: 'ISO country code' })
+  countryCode: string;
 }

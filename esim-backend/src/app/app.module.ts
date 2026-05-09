@@ -13,6 +13,7 @@ import { ProvisioningModule } from 'src/ProvisionningEvent/AuditLog.module';
 import { EsimQueueModule } from 'src/Queue/module/esim-queue.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import Redis from 'ioredis';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
@@ -34,14 +35,24 @@ import { NotificationModule } from '../notification/notification.module';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get('REDIS_HOST', 'localhost'),
-          port: config.get('REDIS_PORT', 6379),
-        },
-        maxRetriesPerRequest: null,
-        defaultJobOptions: { attempts: 5, delay: 30000 },
-      }),
+      useFactory: (config: ConfigService) => {
+        const redisUrl = config.get<string>('REDIS_URL');
+        const connection = redisUrl
+          ? new Redis(redisUrl, {
+              maxRetriesPerRequest: null,
+              tls: {},
+            })
+          : new Redis({
+              host: config.get('REDIS_HOST', 'localhost'),
+              port: config.get<number>('REDIS_PORT', 6379),
+              maxRetriesPerRequest: null,
+            });
+
+        return {
+          connection,
+          defaultJobOptions: { attempts: 5, delay: 30000 },
+        };
+      },
     }),
 
     // ── Bull Board UI — visual queue inspector ───────────────────

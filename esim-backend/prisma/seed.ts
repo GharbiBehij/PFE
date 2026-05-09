@@ -2,8 +2,12 @@
 
 import { PrismaClient, CoverageType, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import * as dotenv from 'dotenv';
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = new PrismaClient();
+dotenv.config();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 // ── Pricing tables by region ────────────────────────────────────────────────
 // Price in TND · dataVolume in MB
@@ -90,6 +94,31 @@ const globalTiers: OfferTier[] = [
   { validityDays: 30, dataVolume: 20480, price: 99 },
 ];
 
+// ── Country code map (French name → ISO) ───────────────────────────────────
+
+const countryCodeMap: Record<string, string> = {
+  // Europe
+  'France': 'fr', 'Allemagne': 'de', 'Italie': 'it', 'Espagne': 'es',
+  'Grèce': 'gr', 'Portugal': 'pt', 'Pays-Bas': 'nl', 'Belgique': 'be',
+  'Suisse': 'ch', 'Autriche': 'at', 'Pologne': 'pl', 'Croatie': 'hr',
+  'Tchéquie': 'cz', 'Hongrie': 'hu',
+  // Asia
+  'Japon': 'jp', 'Chine': 'cn', 'Singapour': 'sg', 'Thaïlande': 'th',
+  'Corée du Sud': 'kr', 'Inde': 'in', 'Indonésie': 'id', 'Malaisie': 'my',
+  // Middle East
+  'Émirats Arabes': 'ae', 'Arabie Saoudite': 'sa',
+  // North America
+  'États-Unis': 'us', 'Canada': 'ca', 'Mexique': 'mx',
+  'Costa Rica': 'cr', 'Panama': 'pa', 'Rép. Dominicaine': 'do',
+  // Oceania
+  'Australie': 'au', 'Nouvelle-Zélande': 'nz',
+  // Regional
+  'Europe': 'eu', 'Asia': 'jp', 'Middle East': 'ae',
+  'North America': 'us', 'Oceania': 'au',
+  // Global
+  'Mondial': 'world',
+};
+
 // ── Countries per region ────────────────────────────────────────────────────
 
 const europeCountries = [
@@ -127,6 +156,8 @@ type OfferCreate = {
   description: string;
   popularity: string;
   coverageType: CoverageType;
+  networkType: string;
+  countryCode: string;
   dataVolume: number;
   validityDays: number;
   price: number;
@@ -143,6 +174,14 @@ const buildOffersForCountry = (
   providerId: number,
   popularity: 'HIGH' | 'MEDIUM' | 'LOW',
 ): OfferCreate[] => {
+  const countryCode = countryCodeMap[country] ?? '';
+  const networkType =
+    coverageType === CoverageType.GLOBAL
+      ? '5G'
+      : coverageType === CoverageType.REGIONAL
+        ? '4G/5G'
+        : '4G';
+
   return tiers.map((tier) => {
     const gbLabel = tier.dataVolume >= 1024
       ? `${tier.dataVolume / 1024}GB`
@@ -162,6 +201,8 @@ const buildOffersForCountry = (
       description: `Forfait eSIM ${country} — ${gbLabel} de données valable ${tier.validityDays} jours.`,
       popularity,
       coverageType,
+      networkType,
+      countryCode,
       dataVolume: tier.dataVolume,
       validityDays: tier.validityDays,
       price: tier.price,

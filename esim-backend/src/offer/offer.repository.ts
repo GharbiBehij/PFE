@@ -14,7 +14,7 @@ export class OfferRepository {
   }
   async create(transactionData: CreateOfferDto) {
     return this.Prisma.offer.create({
-      data: transactionData,
+      data: transactionData as any ,
     });
   }
   async update(id: number, updateData: UpdateOfferDto) {
