@@ -1,9 +1,13 @@
 import { performance } from 'perf_hooks';
-import { EsimStatus, TransactionChannel, TransactionStatus } from '@prisma/client';
+import {
+  EsimStatus,
+  TransactionChannel,
+  TransactionStatus,
+} from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { EsimService } from '../../src/esim/esim.service';
-import { AuditLogService } from '../../src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from '../../src/AuditLog/AuditLog.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EsimRepository } from '../../src/esim/esim.repository';
 import { PROVIDER_ADAPTER } from '../../src/esim/adapters/provider-adapter.token';
@@ -11,11 +15,12 @@ import { TransactionRepository } from '../../src/transaction/transaction.reposit
 import { EsimProducer } from '../../src/Queue/Producer/esim.producer';
 
 const MAX_CONCURRENCY = 5000;
-const CONCURRENCY_PROFILE = [25, 100, 250, 500, 1000,2000,3000,1500, 500, 250, 100, 25];
+const CONCURRENCY_PROFILE = [
+  25, 100, 250, 500, 1000, 2000, 3000, 1500, 500, 250, 100, 25,
+];
 const SYSTEM_DELAY_STEP_MS = 2;
 const PROVIDER_DELAY_STEP_MS = 5;
-const TEST_DATABASE_URL =
-  'postgresql://test:test@localhost:5433/netyfly_test';
+const TEST_DATABASE_URL = 'postgresql://test:test@localhost:5433/netyfly_test';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,8 +60,7 @@ function summarize(values: number[]) {
 
 async function ensureSafeTarget() {
   const dbUrl = process.env.DATABASE_URL ?? '';
-  const allow =
-    dbUrl.includes('localhost') || dbUrl.includes('netyfly_test');
+  const allow = dbUrl.includes('localhost') || dbUrl.includes('netyfly_test');
   const forced = process.env.FORCE_STRESS === '1';
 
   if (!allow && !forced) {

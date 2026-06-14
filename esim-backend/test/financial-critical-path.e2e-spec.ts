@@ -22,18 +22,24 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PurchaseService } from '../src/workers/Purchase.service';
 import { ActivationService } from '../src/workers/activation.service';
 import { WebhookService } from '../src/workers/webhook.service';
-import { TransactionService, TERMINAL_STATUSES } from '../src/transaction/transaction.service';
+import {
+  TransactionService,
+  TERMINAL_STATUSES,
+} from '../src/transaction/transaction.service';
 import { TransactionRepository } from '../src/transaction/transaction.repository';
 import { PaymentRepository } from '../src/payment/payment.repository';
 import { EsimRepository } from '../src/esim/esim.repository';
-import { AuditLogService } from '../src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from '../src/AuditLog/AuditLog.service';
 import { EsimProducer } from '../src/Queue/Producer/esim.producer';
 import { PaymentEventProducer } from '../src/Queue/Producer/payment-event.producer';
 import { PROVIDER_ADAPTER } from '../src/esim/adapters/provider-adapter.token';
 import { PAYMENT_GATEWAY_ADAPTER } from '../src/payment/adapters/payment-gateway.token';
 import { WalletService } from '../src/WalletTransaction/wallet.service';
 import { RetryableError, TerminalError } from '../src/Queue/utils/errors';
-import { PurchaseJobData, ActivateJobData } from '../src/Queue/Interfaces/Queue.interfaces';
+import {
+  PurchaseJobData,
+  ActivateJobData,
+} from '../src/Queue/Interfaces/Queue.interfaces';
 import { PaymentEventJobData } from '../src/Queue/Interfaces/Queue.interfaces';
 import { OfferService } from '../src/offer/offer.service';
 import { mock } from 'node:test';
@@ -1211,444 +1217,456 @@ describe('AuditLog — written after commit, never inside transaction', () => {
     expect(auditIdx).toBeGreaterThan(esimIdx);
   });
 
- it('AUDIT2 — ActivationService: AuditLog written after $transaction resolves', async () => {
-  const { activationService, providerAdapter, auditLog, prisma } =
-    await buildModule();
-
-  const callOrder: string[] = [];
-
-  prisma.$transaction
-    // First call → claimAttempt
-    .mockImplementationOnce(async (fn: any) => {
-      return fn({
-        activationAttempt: {
-          findFirst: jest.fn().mockResolvedValue(null),
-          count: jest.fn().mockResolvedValue(0),
-          create: jest.fn().mockResolvedValue({
-            id: 1,
-            attemptNumber: 1,
-            providerRequestId: 'req-audit-001',
-            status: ActivationAttemptStatus.STARTED,
-            startedAt: new Date(),
-            esimId: 1,
-            completedAt: null,
-            errorCode: null,
-            errorMessage: null,
-          }),
-          update: jest.fn().mockResolvedValue({
-            id: 1,
-            status: ActivationAttemptStatus.SUCCESS,
-          }),
-        },
-      });
-    })
-    // Second call → handleSuccess
-    .mockImplementationOnce(async (fn: any) => {
-      return fn({
-        esim: {
-          update: jest.fn().mockImplementation(async () => {
-            callOrder.push('esim.update');
-            return makeEsim({
-              status: EsimStatus.ACTIVE,
-              activatedAt: new Date(),
-            });
-          }),
-        },
-        transaction: {
-          update: jest.fn().mockResolvedValue(
-            makeTx({ status: TransactionStatus.SUCCEEDED }),
-          ),
-        },
-        activationAttempt: {
-          update: jest.fn().mockResolvedValue({
-            id: 1,
-            attemptNumber: 1,
-            status: ActivationAttemptStatus.SUCCESS,
-            completedAt: new Date(),
-            providerResponse: { status: 'SUCCESS' },
-            providerRequestId: 'req-audit-001',
-            startedAt: new Date(),
-            esimId: 1,
-            errorCode: null,
-            errorMessage: null,
-          }),
-        },
-        walletTransaction: {
-          update: jest.fn().mockResolvedValue({ id: 1, amount: 1800 }),
-          findUnique: jest.fn().mockResolvedValue({ id: 1, amount: 1800 }),
-        },
-        walletLedger: {
-          create: jest.fn().mockResolvedValue({ id: 1 }),
-        },
-      });
-    });
-
-  auditLog.log.mockImplementation(async () => {
-    callOrder.push('auditLog.log');
-  });
-
-  const job = makeActivationJob({ data: { channel: 'B2C' } });
-
-  prisma.transaction.findUnique.mockResolvedValue(
-    makeTx({ status: TransactionStatus.PROCESSING }),
-  );
-  prisma.esim.findFirst.mockResolvedValue(makeEsim());
-  providerAdapter.getStatus.mockResolvedValue({ status: 'SUCCESS' });
-
-  await activationService.handleActivation(job);
-
-  const esimIdx = callOrder.indexOf('esim.update');
-  const auditIdx = callOrder.lastIndexOf('auditLog.log');
-
-  expect(esimIdx).toBeGreaterThanOrEqual(0);
-  expect(auditIdx).toBeGreaterThan(esimIdx);
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SUITE 7 — WebhookService financial path
-// ══════════════════════════════════════════════════════════════════════════════
-
-describe('WebhookService — financial path', () => {
-  afterEach(() => jest.clearAllMocks());
-
-  it('WH-B2C-HP1 — SUCCESS: PENDING_PAYMENT → PAID → PROVISIONING, enqueues eSIM job', async () => {
-    const {
-      webhookService,
-      txRepo,
-      paymentRepo,
-      esimProducer,
-      auditLog,
-      gatewayAdapter,
-    } = await buildModule();
-
-    paymentRepo.findByGatewayPaymentId.mockResolvedValue(
-      makePaymentRecord(TransactionStatus.PENDING_PAYMENT),
-    );
-    paymentRepo.updateStatusByGatewayPaymentId.mockResolvedValue({});
-    // Gateway confirms payment is SUCCESS
-    gatewayAdapter.fetchPaymentStatus.mockResolvedValue({ status: 'SUCCESS' });
-
-    const paidTx = makeTx({ status: TransactionStatus.PAID });
-    const provTx = makeTx({ status: TransactionStatus.PROVISIONING });
-    txRepo.findOne
-      .mockResolvedValueOnce(makeTx({ status: TransactionStatus.PENDING_PAYMENT }))
-      .mockResolvedValueOnce(paidTx);
-    txRepo.updateStatus
-      .mockResolvedValueOnce(paidTx)
-      .mockResolvedValueOnce(provTx);
-
-    const job = makeWebhookJob({
-      gatewayPaymentId: 'gw-001',
-      webhookStatus: 'SUCCESS',
-    });
-    await webhookService.handleWebhookEvent(job);
-
-    expect(txRepo.updateStatus).toHaveBeenCalledWith(
-      1,
-      TransactionStatus.PAID,
-    );
-    expect(txRepo.updateStatus).toHaveBeenCalledWith(
-      1,
-      TransactionStatus.PROVISIONING,
-    );
-    expect(esimProducer.enqueuePurchase).toHaveBeenCalledTimes(1);
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: SystemEvent.PAYMENT_CONFIRMED }),
-    );
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: SystemEvent.PROVISIONING_ENQUEUED }),
-    );
-  });
-
-  it('WH-B2C-HP2 — FAILED: PENDING_PAYMENT → FAILED, no eSIM job enqueued', async () => {
-    const {
-      webhookService,
-      txRepo,
-      paymentRepo,
-      esimProducer,
-      auditLog,
-      gatewayAdapter,
-    } = await buildModule();
-
-    paymentRepo.findByGatewayPaymentId.mockResolvedValue(
-      makePaymentRecord(TransactionStatus.PENDING_PAYMENT),
-    );
-    paymentRepo.updateStatusByGatewayPaymentId.mockResolvedValue({});
-    gatewayAdapter.fetchPaymentStatus.mockResolvedValue({ status: 'FAILED' });
-
-    txRepo.findOne.mockResolvedValue(
-      makeTx({ status: TransactionStatus.PENDING_PAYMENT }),
-    );
-    txRepo.updateStatus.mockResolvedValue(
-      makeTx({ status: TransactionStatus.FAILED }),
-    );
-
-    const job = makeWebhookJob({
-      gatewayPaymentId: 'gw-001',
-      webhookStatus: 'FAILED',
-    });
-    await webhookService.handleWebhookEvent(job);
-
-    expect(txRepo.updateStatus).toHaveBeenCalledWith(
-      1,
-      TransactionStatus.FAILED,
-    );
-    expect(esimProducer.enqueuePurchase).not.toHaveBeenCalled();
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: SystemEvent.PAYMENT_FAILED }),
-    );
-  });
-
-  it('WH-B2C-HP3 — duplicate SUCCESS (already PROVISIONING): idempotent no-op', async () => {
-    const { webhookService, txRepo, paymentRepo, esimProducer } =
+  it('AUDIT2 — ActivationService: AuditLog written after $transaction resolves', async () => {
+    const { activationService, providerAdapter, auditLog, prisma } =
       await buildModule();
 
-    paymentRepo.findByGatewayPaymentId.mockResolvedValue(
-      makePaymentRecord(TransactionStatus.PROVISIONING),
-    );
+    const callOrder: string[] = [];
 
-    const job = makeWebhookJob({
-      gatewayPaymentId: 'gw-001',
-      webhookStatus: 'SUCCESS',
+    prisma.$transaction
+      // First call → claimAttempt
+      .mockImplementationOnce(async (fn: any) => {
+        return fn({
+          activationAttempt: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            count: jest.fn().mockResolvedValue(0),
+            create: jest.fn().mockResolvedValue({
+              id: 1,
+              attemptNumber: 1,
+              providerRequestId: 'req-audit-001',
+              status: ActivationAttemptStatus.STARTED,
+              startedAt: new Date(),
+              esimId: 1,
+              completedAt: null,
+              errorCode: null,
+              errorMessage: null,
+            }),
+            update: jest.fn().mockResolvedValue({
+              id: 1,
+              status: ActivationAttemptStatus.SUCCESS,
+            }),
+          },
+        });
+      })
+      // Second call → handleSuccess
+      .mockImplementationOnce(async (fn: any) => {
+        return fn({
+          esim: {
+            update: jest.fn().mockImplementation(async () => {
+              callOrder.push('esim.update');
+              return makeEsim({
+                status: EsimStatus.ACTIVE,
+                activatedAt: new Date(),
+              });
+            }),
+          },
+          transaction: {
+            update: jest
+              .fn()
+              .mockResolvedValue(
+                makeTx({ status: TransactionStatus.SUCCEEDED }),
+              ),
+          },
+          activationAttempt: {
+            update: jest.fn().mockResolvedValue({
+              id: 1,
+              attemptNumber: 1,
+              status: ActivationAttemptStatus.SUCCESS,
+              completedAt: new Date(),
+              providerResponse: { status: 'SUCCESS' },
+              providerRequestId: 'req-audit-001',
+              startedAt: new Date(),
+              esimId: 1,
+              errorCode: null,
+              errorMessage: null,
+            }),
+          },
+          walletTransaction: {
+            update: jest.fn().mockResolvedValue({ id: 1, amount: 1800 }),
+            findUnique: jest.fn().mockResolvedValue({ id: 1, amount: 1800 }),
+          },
+          walletLedger: {
+            create: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        });
+      });
+
+    auditLog.log.mockImplementation(async () => {
+      callOrder.push('auditLog.log');
     });
-    await webhookService.handleWebhookEvent(job);
 
-    expect(txRepo.updateStatus).not.toHaveBeenCalled();
-    expect(esimProducer.enqueuePurchase).not.toHaveBeenCalled();
-  });
-
-  it('WH-B2C-HP4 — no payment record: throws TerminalError', async () => {
-    const { webhookService, paymentRepo } = await buildModule();
-
-    paymentRepo.findByGatewayPaymentId.mockResolvedValue(null);
-
-    const job = makeWebhookJob({
-      gatewayPaymentId: 'gw-unknown',
-      webhookStatus: 'SUCCESS',
-    });
-
-    await expect(webhookService.handleWebhookEvent(job)).rejects.toThrow(
-      'No payment found',
-    );
-  });
-
-  it('WH-B2C-HP5 — PENDING status: throws retryable error for BullMQ retry', async () => {
-    const { webhookService, paymentRepo, txRepo, gatewayAdapter } =
-      await buildModule();
-
-    paymentRepo.findByGatewayPaymentId.mockResolvedValue(
-      makePaymentRecord(TransactionStatus.PENDING_PAYMENT),
-    );
-    // Gateway still reports PENDING
-    gatewayAdapter.fetchPaymentStatus.mockResolvedValue({ status: 'PENDING' });
-
-    const job = makeWebhookJob({
-      gatewayPaymentId: 'gw-001',
-      webhookStatus: 'PENDING',
-    });
-
-    await expect(webhookService.handleWebhookEvent(job)).rejects.toThrow(
-      'still PENDING',
-    );
-
-    expect(txRepo.updateStatus).not.toHaveBeenCalled();
-  });
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SUITE 8 — Full E2E financial flow
-// ══════════════════════════════════════════════════════════════════════════════
-
-describe('Full E2E — purchase → webhook → activation financial flow', () => {
-  afterEach(() => jest.clearAllMocks());
-
-  it('E2E-B2C-FULL — complete B2C flow: provision → webhook → activate', async () => {
-    const {
-      purchaseService,
-      webhookService,
-      activationService,
-      providerAdapter,
-      txRepo,
-      paymentRepo,
-      esimProducer,
-      auditLog,
-      gatewayAdapter,
-      prisma,
-    } = await buildModule();
-
-    // ── Phase 1: Purchase ────────────────────────────────────────────────────
-    const purchaseJob = makePurchaseJob({ data: { channel: 'B2C' } });
+    const job = makeActivationJob({ data: { channel: 'B2C' } });
 
     prisma.transaction.findUnique.mockResolvedValue(
-      makeTx({ status: TransactionStatus.PROVISIONING, channel: 'B2C' }),
-    );
-    prisma.payment.findUnique.mockResolvedValue({ id: 1, transactionId: 1 });
-    prisma.esim.findUnique.mockResolvedValue(null);
-    providerAdapter.createEsim.mockResolvedValue({
-      iccid: 'ICCID-E2E-001',
-      activationCode: 'ACT-E2E-001',
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    });
-
-    await purchaseService.handlePurchase(purchaseJob);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: SystemEvent.PROVISIONING_SUCCESS }),
-    );
-
-    jest.clearAllMocks();
-    auditLog.log.mockResolvedValue(undefined);
-
-    // ── Phase 2: Webhook SUCCESS ─────────────────────────────────────────────
-    paymentRepo.findByGatewayPaymentId.mockResolvedValue(
-      makePaymentRecord(TransactionStatus.PENDING_PAYMENT, {
-        gatewayPaymentId: 'gw-e2e-001',
-        transactionId: 1,
-      }),
-    );
-    paymentRepo.updateStatusByGatewayPaymentId.mockResolvedValue({});
-    gatewayAdapter.fetchPaymentStatus.mockResolvedValue({ status: 'SUCCESS' });
-
-    const paidTx = makeTx({ status: TransactionStatus.PAID });
-    const provTx = makeTx({ status: TransactionStatus.PROVISIONING });
-    txRepo.findOne
-      .mockResolvedValueOnce(makeTx({ status: TransactionStatus.PENDING_PAYMENT }))
-      .mockResolvedValueOnce(paidTx);
-    txRepo.updateStatus
-      .mockResolvedValueOnce(paidTx)
-      .mockResolvedValueOnce(provTx);
-
-    const webhookJob = makeWebhookJob({
-      gatewayPaymentId: 'gw-e2e-001',
-      webhookStatus: 'SUCCESS',
-    });
-    await webhookService.handleWebhookEvent(webhookJob);
-
-    expect(esimProducer.enqueuePurchase).toHaveBeenCalledTimes(1);
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: SystemEvent.PAYMENT_CONFIRMED }),
-    );
-
-    jest.clearAllMocks();
-    auditLog.log.mockResolvedValue(undefined);
-
-    // ── Phase 3: Activation ──────────────────────────────────────────────────
-    const activationJob = makeActivationJob({ data: { channel: 'B2C' } });
-
-    prisma.transaction.findUnique.mockResolvedValue(
-      makeTx({ status: TransactionStatus.PROCESSING, channel: 'B2C' }),
-    );
-    prisma.esim.findFirst.mockResolvedValue(
-      makeEsim({ iccid: 'ICCID-E2E-001', status: EsimStatus.NOT_ACTIVE }),
-    );
-    providerAdapter.getStatus.mockResolvedValue({ status: 'SUCCESS' });
-
-    await activationService.handleActivation(activationJob);
-
-    expect(prisma.$transaction).toHaveBeenCalledTimes(2); // claimAttempt + handleSuccess
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: SystemEvent.ACTIVATION_SUCCESS,
-        toStatus: 'SUCCEEDED',
-      }),
-    );
-  });
-
-  it('E2E-B2B2C-FULL — complete B2B2C flow: wallet reserved → provision → activate → committed', async () => {
-    const {
-      purchaseService,
-      activationService,
-      providerAdapter,
-      walletService,
-      auditLog,
-      prisma,
-    } = await buildModule();
-
-    // ── Phase 1: Purchase (B2B2C — no webhook, wallet funded directly) ───────
-    const purchaseJob = makePurchaseJob({ data: { channel: 'B2B2C' } });
-
-    prisma.transaction.findUnique.mockResolvedValue(
-      makeTx({ status: TransactionStatus.PROVISIONING, channel: 'B2B2C' }),
-    );
-    prisma.walletTransaction.findUnique.mockResolvedValue({
-      id: 1,
-      status: 'RESERVED',
-      amount: 1800,
-    });
-    prisma.esim.findUnique.mockResolvedValue(null);
-    providerAdapter.createEsim.mockResolvedValue({
-      iccid: 'ICCID-B2B2C-E2E',
-      activationCode: 'ACT-B2B2C-E2E',
-      expiryDate: new Date(),
-    });
-
-    await purchaseService.handlePurchase(purchaseJob);
-
-    expect(walletService.commitReservedFunds).not.toHaveBeenCalled();
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: SystemEvent.PROVISIONING_SUCCESS }),
-    );
-
-    jest.clearAllMocks();
-    auditLog.log.mockResolvedValue(undefined);
-
-    // ── Phase 2: Activation (B2B2C — wallet committed inside transaction) ────
-    const activationJob = makeActivationJob({ data: { channel: 'B2B2C' } });
-
-    prisma.transaction.findUnique.mockResolvedValue(
-      makeTx({ status: TransactionStatus.PROCESSING, channel: 'B2B2C' }),
-    );
-    prisma.esim.findFirst.mockResolvedValue(
-      makeEsim({ iccid: 'ICCID-B2B2C-E2E', status: EsimStatus.NOT_ACTIVE }),
-    );
-    providerAdapter.getStatus.mockResolvedValue({ status: 'SUCCESS' });
-
-    await activationService.handleActivation(activationJob);
-
-    expect(walletService.commitReservedFunds).not.toHaveBeenCalled();
-    expect(prisma.$transaction).toHaveBeenCalledTimes(2); // claimAttempt + handleSuccess
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: SystemEvent.ACTIVATION_SUCCESS,
-        toStatus: 'SUCCEEDED',
-      }),
-    );
-  });
-
-  it('E2E-B2B2C-FAILURE — activation failure releases wallet atomically', async () => {
-    const {
-      activationService,
-      providerAdapter,
-      walletService,
-      auditLog,
-      prisma,
-    } = await buildModule();
-
-    const job = makeActivationJob({ data: { channel: 'B2B2C' } });
-
-    prisma.transaction.findUnique.mockResolvedValue(
-      makeTx({ status: TransactionStatus.PROCESSING, channel: 'B2B2C' }),
+      makeTx({ status: TransactionStatus.PROCESSING }),
     );
     prisma.esim.findFirst.mockResolvedValue(makeEsim());
-    providerAdapter.getStatus.mockResolvedValue({
-      status: 'FAILED',
-      message: 'Provider rejected activation',
+    providerAdapter.getStatus.mockResolvedValue({ status: 'SUCCESS' });
+
+    await activationService.handleActivation(job);
+
+    const esimIdx = callOrder.indexOf('esim.update');
+    const auditIdx = callOrder.lastIndexOf('auditLog.log');
+
+    expect(esimIdx).toBeGreaterThanOrEqual(0);
+    expect(auditIdx).toBeGreaterThan(esimIdx);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SUITE 7 — WebhookService financial path
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  describe('WebhookService — financial path', () => {
+    afterEach(() => jest.clearAllMocks());
+
+    it('WH-B2C-HP1 — SUCCESS: PENDING_PAYMENT → PAID → PROVISIONING, enqueues eSIM job', async () => {
+      const {
+        webhookService,
+        txRepo,
+        paymentRepo,
+        esimProducer,
+        auditLog,
+        gatewayAdapter,
+      } = await buildModule();
+
+      paymentRepo.findByGatewayPaymentId.mockResolvedValue(
+        makePaymentRecord(TransactionStatus.PENDING_PAYMENT),
+      );
+      paymentRepo.updateStatusByGatewayPaymentId.mockResolvedValue({});
+      // Gateway confirms payment is SUCCESS
+      gatewayAdapter.fetchPaymentStatus.mockResolvedValue({
+        status: 'SUCCESS',
+      });
+
+      const paidTx = makeTx({ status: TransactionStatus.PAID });
+      const provTx = makeTx({ status: TransactionStatus.PROVISIONING });
+      txRepo.findOne
+        .mockResolvedValueOnce(
+          makeTx({ status: TransactionStatus.PENDING_PAYMENT }),
+        )
+        .mockResolvedValueOnce(paidTx);
+      txRepo.updateStatus
+        .mockResolvedValueOnce(paidTx)
+        .mockResolvedValueOnce(provTx);
+
+      const job = makeWebhookJob({
+        gatewayPaymentId: 'gw-001',
+        webhookStatus: 'SUCCESS',
+      });
+      await webhookService.handleWebhookEvent(job);
+
+      expect(txRepo.updateStatus).toHaveBeenCalledWith(
+        1,
+        TransactionStatus.PAID,
+      );
+      expect(txRepo.updateStatus).toHaveBeenCalledWith(
+        1,
+        TransactionStatus.PROVISIONING,
+      );
+      expect(esimProducer.enqueuePurchase).toHaveBeenCalledTimes(1);
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ event: SystemEvent.PAYMENT_CONFIRMED }),
+      );
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ event: SystemEvent.PROVISIONING_ENQUEUED }),
+      );
     });
 
-    await expect(activationService.handleActivation(job)).rejects.toThrow(
-      TerminalError,
-    );
+    it('WH-B2C-HP2 — FAILED: PENDING_PAYMENT → FAILED, no eSIM job enqueued', async () => {
+      const {
+        webhookService,
+        txRepo,
+        paymentRepo,
+        esimProducer,
+        auditLog,
+        gatewayAdapter,
+      } = await buildModule();
 
-    // Wallet release must be inside $transaction — not via walletService
-    expect(walletService.releaseReservedFunds).not.toHaveBeenCalled();
-    expect(prisma.$transaction).toHaveBeenCalledTimes(2); // claimAttempt + handleFailure
-    expect(auditLog.log).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: SystemEvent.ACTIVATION_FAILED,
-        toStatus: 'FAILED',
-      }),
-    );
+      paymentRepo.findByGatewayPaymentId.mockResolvedValue(
+        makePaymentRecord(TransactionStatus.PENDING_PAYMENT),
+      );
+      paymentRepo.updateStatusByGatewayPaymentId.mockResolvedValue({});
+      gatewayAdapter.fetchPaymentStatus.mockResolvedValue({ status: 'FAILED' });
+
+      txRepo.findOne.mockResolvedValue(
+        makeTx({ status: TransactionStatus.PENDING_PAYMENT }),
+      );
+      txRepo.updateStatus.mockResolvedValue(
+        makeTx({ status: TransactionStatus.FAILED }),
+      );
+
+      const job = makeWebhookJob({
+        gatewayPaymentId: 'gw-001',
+        webhookStatus: 'FAILED',
+      });
+      await webhookService.handleWebhookEvent(job);
+
+      expect(txRepo.updateStatus).toHaveBeenCalledWith(
+        1,
+        TransactionStatus.FAILED,
+      );
+      expect(esimProducer.enqueuePurchase).not.toHaveBeenCalled();
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ event: SystemEvent.PAYMENT_FAILED }),
+      );
+    });
+
+    it('WH-B2C-HP3 — duplicate SUCCESS (already PROVISIONING): idempotent no-op', async () => {
+      const { webhookService, txRepo, paymentRepo, esimProducer } =
+        await buildModule();
+
+      paymentRepo.findByGatewayPaymentId.mockResolvedValue(
+        makePaymentRecord(TransactionStatus.PROVISIONING),
+      );
+
+      const job = makeWebhookJob({
+        gatewayPaymentId: 'gw-001',
+        webhookStatus: 'SUCCESS',
+      });
+      await webhookService.handleWebhookEvent(job);
+
+      expect(txRepo.updateStatus).not.toHaveBeenCalled();
+      expect(esimProducer.enqueuePurchase).not.toHaveBeenCalled();
+    });
+
+    it('WH-B2C-HP4 — no payment record: throws TerminalError', async () => {
+      const { webhookService, paymentRepo } = await buildModule();
+
+      paymentRepo.findByGatewayPaymentId.mockResolvedValue(null);
+
+      const job = makeWebhookJob({
+        gatewayPaymentId: 'gw-unknown',
+        webhookStatus: 'SUCCESS',
+      });
+
+      await expect(webhookService.handleWebhookEvent(job)).rejects.toThrow(
+        'No payment found',
+      );
+    });
+
+    it('WH-B2C-HP5 — PENDING status: throws retryable error for BullMQ retry', async () => {
+      const { webhookService, paymentRepo, txRepo, gatewayAdapter } =
+        await buildModule();
+
+      paymentRepo.findByGatewayPaymentId.mockResolvedValue(
+        makePaymentRecord(TransactionStatus.PENDING_PAYMENT),
+      );
+      // Gateway still reports PENDING
+      gatewayAdapter.fetchPaymentStatus.mockResolvedValue({
+        status: 'PENDING',
+      });
+
+      const job = makeWebhookJob({
+        gatewayPaymentId: 'gw-001',
+        webhookStatus: 'PENDING',
+      });
+
+      await expect(webhookService.handleWebhookEvent(job)).rejects.toThrow(
+        'still PENDING',
+      );
+
+      expect(txRepo.updateStatus).not.toHaveBeenCalled();
+    });
   });
-});
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // SUITE 8 — Full E2E financial flow
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  describe('Full E2E — purchase → webhook → activation financial flow', () => {
+    afterEach(() => jest.clearAllMocks());
+
+    it('E2E-B2C-FULL — complete B2C flow: provision → webhook → activate', async () => {
+      const {
+        purchaseService,
+        webhookService,
+        activationService,
+        providerAdapter,
+        txRepo,
+        paymentRepo,
+        esimProducer,
+        auditLog,
+        gatewayAdapter,
+        prisma,
+      } = await buildModule();
+
+      // ── Phase 1: Purchase ────────────────────────────────────────────────────
+      const purchaseJob = makePurchaseJob({ data: { channel: 'B2C' } });
+
+      prisma.transaction.findUnique.mockResolvedValue(
+        makeTx({ status: TransactionStatus.PROVISIONING, channel: 'B2C' }),
+      );
+      prisma.payment.findUnique.mockResolvedValue({ id: 1, transactionId: 1 });
+      prisma.esim.findUnique.mockResolvedValue(null);
+      providerAdapter.createEsim.mockResolvedValue({
+        iccid: 'ICCID-E2E-001',
+        activationCode: 'ACT-E2E-001',
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+
+      await purchaseService.handlePurchase(purchaseJob);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ event: SystemEvent.PROVISIONING_SUCCESS }),
+      );
+
+      jest.clearAllMocks();
+      auditLog.log.mockResolvedValue(undefined);
+
+      // ── Phase 2: Webhook SUCCESS ─────────────────────────────────────────────
+      paymentRepo.findByGatewayPaymentId.mockResolvedValue(
+        makePaymentRecord(TransactionStatus.PENDING_PAYMENT, {
+          gatewayPaymentId: 'gw-e2e-001',
+          transactionId: 1,
+        }),
+      );
+      paymentRepo.updateStatusByGatewayPaymentId.mockResolvedValue({});
+      gatewayAdapter.fetchPaymentStatus.mockResolvedValue({
+        status: 'SUCCESS',
+      });
+
+      const paidTx = makeTx({ status: TransactionStatus.PAID });
+      const provTx = makeTx({ status: TransactionStatus.PROVISIONING });
+      txRepo.findOne
+        .mockResolvedValueOnce(
+          makeTx({ status: TransactionStatus.PENDING_PAYMENT }),
+        )
+        .mockResolvedValueOnce(paidTx);
+      txRepo.updateStatus
+        .mockResolvedValueOnce(paidTx)
+        .mockResolvedValueOnce(provTx);
+
+      const webhookJob = makeWebhookJob({
+        gatewayPaymentId: 'gw-e2e-001',
+        webhookStatus: 'SUCCESS',
+      });
+      await webhookService.handleWebhookEvent(webhookJob);
+
+      expect(esimProducer.enqueuePurchase).toHaveBeenCalledTimes(1);
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ event: SystemEvent.PAYMENT_CONFIRMED }),
+      );
+
+      jest.clearAllMocks();
+      auditLog.log.mockResolvedValue(undefined);
+
+      // ── Phase 3: Activation ──────────────────────────────────────────────────
+      const activationJob = makeActivationJob({ data: { channel: 'B2C' } });
+
+      prisma.transaction.findUnique.mockResolvedValue(
+        makeTx({ status: TransactionStatus.PROCESSING, channel: 'B2C' }),
+      );
+      prisma.esim.findFirst.mockResolvedValue(
+        makeEsim({ iccid: 'ICCID-E2E-001', status: EsimStatus.NOT_ACTIVE }),
+      );
+      providerAdapter.getStatus.mockResolvedValue({ status: 'SUCCESS' });
+
+      await activationService.handleActivation(activationJob);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2); // claimAttempt + handleSuccess
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: SystemEvent.ACTIVATION_SUCCESS,
+          toStatus: 'SUCCEEDED',
+        }),
+      );
+    });
+
+    it('E2E-B2B2C-FULL — complete B2B2C flow: wallet reserved → provision → activate → committed', async () => {
+      const {
+        purchaseService,
+        activationService,
+        providerAdapter,
+        walletService,
+        auditLog,
+        prisma,
+      } = await buildModule();
+
+      // ── Phase 1: Purchase (B2B2C — no webhook, wallet funded directly) ───────
+      const purchaseJob = makePurchaseJob({ data: { channel: 'B2B2C' } });
+
+      prisma.transaction.findUnique.mockResolvedValue(
+        makeTx({ status: TransactionStatus.PROVISIONING, channel: 'B2B2C' }),
+      );
+      prisma.walletTransaction.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'RESERVED',
+        amount: 1800,
+      });
+      prisma.esim.findUnique.mockResolvedValue(null);
+      providerAdapter.createEsim.mockResolvedValue({
+        iccid: 'ICCID-B2B2C-E2E',
+        activationCode: 'ACT-B2B2C-E2E',
+        expiryDate: new Date(),
+      });
+
+      await purchaseService.handlePurchase(purchaseJob);
+
+      expect(walletService.commitReservedFunds).not.toHaveBeenCalled();
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ event: SystemEvent.PROVISIONING_SUCCESS }),
+      );
+
+      jest.clearAllMocks();
+      auditLog.log.mockResolvedValue(undefined);
+
+      // ── Phase 2: Activation (B2B2C — wallet committed inside transaction) ────
+      const activationJob = makeActivationJob({ data: { channel: 'B2B2C' } });
+
+      prisma.transaction.findUnique.mockResolvedValue(
+        makeTx({ status: TransactionStatus.PROCESSING, channel: 'B2B2C' }),
+      );
+      prisma.esim.findFirst.mockResolvedValue(
+        makeEsim({ iccid: 'ICCID-B2B2C-E2E', status: EsimStatus.NOT_ACTIVE }),
+      );
+      providerAdapter.getStatus.mockResolvedValue({ status: 'SUCCESS' });
+
+      await activationService.handleActivation(activationJob);
+
+      expect(walletService.commitReservedFunds).not.toHaveBeenCalled();
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2); // claimAttempt + handleSuccess
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: SystemEvent.ACTIVATION_SUCCESS,
+          toStatus: 'SUCCEEDED',
+        }),
+      );
+    });
+
+    it('E2E-B2B2C-FAILURE — activation failure releases wallet atomically', async () => {
+      const {
+        activationService,
+        providerAdapter,
+        walletService,
+        auditLog,
+        prisma,
+      } = await buildModule();
+
+      const job = makeActivationJob({ data: { channel: 'B2B2C' } });
+
+      prisma.transaction.findUnique.mockResolvedValue(
+        makeTx({ status: TransactionStatus.PROCESSING, channel: 'B2B2C' }),
+      );
+      prisma.esim.findFirst.mockResolvedValue(makeEsim());
+      providerAdapter.getStatus.mockResolvedValue({
+        status: 'FAILED',
+        message: 'Provider rejected activation',
+      });
+
+      await expect(activationService.handleActivation(job)).rejects.toThrow(
+        TerminalError,
+      );
+
+      // Wallet release must be inside $transaction — not via walletService
+      expect(walletService.releaseReservedFunds).not.toHaveBeenCalled();
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2); // claimAttempt + handleFailure
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: SystemEvent.ACTIVATION_FAILED,
+          toStatus: 'FAILED',
+        }),
+      );
+    });
+  });
 });

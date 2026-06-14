@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { PurpleButton } from '../../components/Buttons';
 import { ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
 import { useAuth } from '../../hooks/client/useAuth';
 import { navigateTo } from '../../navigation/navigationRef';
@@ -13,6 +14,17 @@ type Props = NativeStackScreenProps<ProfileStackParamList, 'Profile'>;
 export const ProfileScreen = ({ navigation }: Props) => {
   const { user, logout } = useAuth();
   const tabBarHeight = useBottomTabBarHeight();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Déconnexion',
+      'Êtes-vous sûr de vouloir vous déconnecter ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Se déconnecter', style: 'destructive', onPress: logout },
+      ],
+    );
+  };
 
   if (!user) {
     return (
@@ -43,18 +55,28 @@ export const ProfileScreen = ({ navigation }: Props) => {
             <Text style={styles.guestSubtitle}>
               Gérez vos eSIMs, paiements et paramètres
             </Text>
-            <Pressable
-              onPress={() =>
-                navigateTo('Register', { source: 'app' })
-              }
-              style={styles.guestRegisterLink}
-            >
-              <Text style={styles.guestRegisterText}>
-                Pas encore de compte ?{' '}
-                <Text style={styles.guestRegisterAccent}>
-                  Créer un compte
+            <View style={styles.guestCta}>
+              <PurpleButton
+                icon="log-in-outline"
+                label="Se connecter"
+                onPress={() => navigateTo('Login', { source: 'app' })}
+              />
+              <Pressable
+                onPress={() => navigateTo('Register', { source: 'app' })}
+                style={styles.guestRegisterLink}
+              >
+                <Text style={styles.guestRegisterText}>
+                  Pas encore de compte ?{' '}
+                  <Text style={styles.guestRegisterAccent}>Créer un compte</Text>
                 </Text>
-              </Text>
+              </Pressable>
+            </View>
+            <Pressable
+              onPress={() => navigateTo('Onboarding')}
+              style={styles.guestIntroLink}
+            >
+              <Ionicons name="play-circle-outline" size={sizes.icon.sm} color={colors.text.tertiary} />
+              <Text style={styles.guestIntroText}>Voir l'introduction</Text>
             </Pressable>
           </View>
         </ScreenContent>
@@ -70,64 +92,104 @@ export const ProfileScreen = ({ navigation }: Props) => {
         <Text style={styles.headerTitle}>Profil</Text>
       </ScreenHeader>
 
-      <ScreenContent contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.xl }]}>
+      <ScreenContent
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.xl }]}
+      >
+        {/* ── Profile card ── */}
         <Section>
           <View style={styles.profileCard}>
             <View style={styles.profileRow}>
               <View style={styles.avatarWrap}>
-                <Text style={styles.avatarText}>
-                  {initials || 'U'}
-                </Text>
+                <Text style={styles.avatarText}>{initials || 'U'}</Text>
               </View>
               <View style={styles.profileTextWrap}>
                 <Text style={styles.profileName}>
                   {`${user?.firstname ?? ''} ${user?.lastname ?? ''}`.trim() || 'Utilisateur'}
                 </Text>
-                <Text style={styles.profileEmail}>
-                  {user?.email ?? '-'}
-                </Text>
+                <Text style={styles.profileEmail}>{user?.email ?? '-'}</Text>
               </View>
             </View>
           </View>
         </Section>
 
+        {/* ── Compte section ── */}
         <Section>
-          <Text style={styles.sectionCaption}>
-            Compte
-          </Text>
+          <Text style={styles.sectionCaption}>Compte</Text>
           <View style={styles.sectionCard}>
-            <MenuItem icon="person-outline" label="Détails personnels" onPress={() => navigation.navigate('PersonalDetails')} />
+            <MenuItem
+              icon="person-outline"
+              label="Détails personnels"
+              onPress={() => navigation.navigate('PersonalDetails')}
+            />
             <View style={styles.divider} />
-            <MenuItem icon="card-outline" label="Moyens de paiement" onPress={() => navigation.navigate('PaymentMethods')} />
+            <MenuItem
+              icon="card-outline"
+              label="Moyens de paiement"
+              onPress={() => navigation.navigate('PaymentMethods')}
+            />
             <View style={styles.divider} />
-            <MenuItem icon="settings-outline" label="Paramètres" onPress={() => navigation.navigate('Settings')} />
+            <MenuItem
+              icon="settings-outline"
+              label="Paramètres"
+              onPress={() => navigation.navigate('Settings')}
+            />
             {user?.role === 'SALESMAN' ? (
               <>
                 <View style={styles.divider} />
-                <MenuItem icon="wallet-outline" label="Portefeuille" onPress={() => navigation.navigate('Wallet')} />
+                <MenuItem
+                  icon="wallet-outline"
+                  label="Portefeuille"
+                  onPress={() => navigation.navigate('Wallet')}
+                />
               </>
             ) : null}
           </View>
         </Section>
 
+        {/* ── Support section ── */}
         <Section>
-          <Text style={styles.sectionCaption}>
-            Support
-          </Text>
+          <Text style={styles.sectionCaption}>Support</Text>
           <View style={styles.sectionCard}>
-            <MenuItem icon="help-circle-outline" label="Centre d'aide" onPress={() => navigation.navigate('HelpCenter')} />
+            <MenuItem
+              icon="help-circle-outline"
+              label="Centre d'aide"
+              onPress={() => navigation.navigate('HelpCenter')}
+            />
           </View>
         </Section>
 
+        {/* ── Disconnect ── */}
         <Section>
-          <Pressable onPress={logout} style={({ pressed }) => [styles.logoutButton, pressed ? styles.logoutButtonPressed : undefined]}>
-            <View style={styles.logoutRow}>
-              <Ionicons color={colors.error.DEFAULT} name="log-out-outline" size={sizes.icon.sm} />
-              <Text style={styles.logoutText}>
-                Déconnexion
-              </Text>
-            </View>
-          </Pressable>
+          <View style={styles.sectionCard}>
+            <Pressable
+              onPress={handleLogout}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && styles.menuItemPressed,
+              ]}
+            >
+              <View style={styles.menuRow}>
+                <View style={[styles.menuIconWrap, styles.menuIconError]}>
+                  <Ionicons
+                    color={colors.error.DEFAULT}
+                    name="log-out-outline"
+                    size={sizes.icon.sm}
+                  />
+                </View>
+                <View style={styles.menuItemTextBlock}>
+                  <Text style={[styles.menuLabel, styles.menuLabelError]}>
+                    Se déconnecter
+                  </Text>
+                  <Text style={styles.menuItemSub}>Retourner à l'accueil</Text>
+                </View>
+                <Ionicons
+                  color={colors.error.DEFAULT}
+                  name="chevron-forward"
+                  size={sizes.icon.sm}
+                />
+              </View>
+            </Pressable>
+          </View>
         </Section>
       </ScreenContent>
     </ScreenShell>
@@ -143,14 +205,15 @@ const MenuItem = ({
   label: string;
   onPress: () => void;
 }) => (
-  <Pressable onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed ? styles.menuItemPressed : undefined]}>
+  <Pressable
+    onPress={onPress}
+    style={({ pressed }) => [styles.menuItem, pressed ? styles.menuItemPressed : undefined]}
+  >
     <View style={styles.menuRow}>
       <View style={styles.menuIconWrap}>
-        <Ionicons color={colors.text.secondary} name={icon} size={sizes.icon.sm} />
+        <Ionicons color={colors.primary.DEFAULT} name={icon} size={sizes.icon.sm} />
       </View>
-      <Text style={styles.menuLabel}>
-        {label}
-      </Text>
+      <Text style={styles.menuLabel}>{label}</Text>
       <Ionicons color={colors.text.tertiary} name="chevron-forward" size={sizes.icon.sm} />
     </View>
   </Pressable>
@@ -204,23 +267,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  guestLoginButton: {
-    ...patterns.ctaPrimary,
+  guestCta: {
     alignSelf: 'stretch',
-    marginTop: spacing.md,
-    backgroundColor: colors.primary.DEFAULT,
-  },
-  guestLoginButtonPressed: {
-    ...patterns.ctaPrimaryPressed,
-    backgroundColor: colors.primary.dark,
-  },
-  guestLoginButtonText: {
-    ...typography.labelLG,
-    color: colors.text.onPrimary,
-    fontWeight: '700',
+    gap: spacing.md,
   },
   guestRegisterLink: {
     paddingVertical: spacing.sm,
+    alignItems: 'center',
   },
   guestRegisterText: {
     ...typography.bodyMD,
@@ -231,6 +284,18 @@ const styles = StyleSheet.create({
     color: colors.primary.DEFAULT,
     fontWeight: '700',
   },
+  guestIntroLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  guestIntroText: {
+    ...typography.bodySM,
+    color: colors.text.tertiary,
+  },
+
+  /* ── Profile card ── */
   profileCard: {
     ...patterns.card,
     padding: spacing.lg,
@@ -253,9 +318,7 @@ const styles = StyleSheet.create({
     color: colors.primary.DEFAULT,
     fontWeight: '700',
   },
-  profileTextWrap: {
-    flex: 1,
-  },
+  profileTextWrap: { flex: 1 },
   profileName: {
     ...typography.titleSM,
     color: colors.text.primary,
@@ -265,6 +328,8 @@ const styles = StyleSheet.create({
     ...typography.bodySM,
     color: colors.text.secondary,
   },
+
+  /* ── Sections ── */
   sectionCaption: {
     ...typography.overline,
     color: colors.text.tertiary,
@@ -280,6 +345,8 @@ const styles = StyleSheet.create({
     height: 1,
     marginHorizontal: spacing.lg,
   },
+
+  /* ── Menu items ── */
   menuItem: {
     borderRadius: radii.lg,
   },
@@ -292,11 +359,14 @@ const styles = StyleSheet.create({
   },
   menuIconWrap: {
     alignItems: 'center',
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.primary[100],
     borderRadius: radii.md,
     height: sizes.avatar.md,
     justifyContent: 'center',
     width: sizes.avatar.md,
+  },
+  menuIconError: {
+    backgroundColor: colors.error[50],
   },
   menuLabel: {
     ...typography.bodyMD,
@@ -304,31 +374,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: '600',
   },
+  menuLabelError: {
+    color: colors.error.DEFAULT,
+  },
+  menuItemTextBlock: {
+    flex: 1,
+  },
+  menuItemSub: {
+    ...typography.bodySM,
+    color: colors.text.secondary,
+    marginTop: spacing.xxs,
+  },
   menuItemPressed: {
     backgroundColor: colors.state.hover,
-    transform: [{ scale: 0.98 }],
-  },
-  logoutButton: {
-    backgroundColor: colors.surface,
-    borderColor: colors.error.DEFAULT,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    minHeight: sizes.button.minHeight,
-    paddingVertical: spacing.md,
-    width: '100%',
-  },
-  logoutRow: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  logoutText: {
-    ...typography.labelMD,
-    color: colors.error.DEFAULT,
-    fontWeight: '700',
-  },
-  logoutButtonPressed: {
-    backgroundColor: colors.borderSubtle,
     transform: [{ scale: 0.98 }],
   },
 });

@@ -2,15 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { PrimaryButton } from '../../components/Cards/PrimaryCard';
-import Animated, {
-  FadeInDown,
-  FadeOut,
-  SlideInLeft,
-  SlideInRight,
-  SlideOutLeft,
-  SlideOutRight,
-} from 'react-native-reanimated';
+import { ActionButton, OutlineButton, PurpleButton } from '../../components/Buttons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Group,
@@ -23,7 +16,6 @@ import { PackageCard } from '../../components/Cards/PackageCard';
 import { useOffersByCountry } from '../../hooks/client/useOffers';
 import type { HomeStackParamList } from '../../navigation/types';
 import {
-  Animation,
   colors,
   patterns,
   radii,
@@ -31,31 +23,22 @@ import {
   sizes,
   spacing,
   typography,
-  zIndex,
 } from '../../theme';
 import type { Offer } from '../../types/offer';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'PackageListing'>;
-type PlanType = 'standard' | 'Illimité';
-
-const DATA_THRESHOLD_MB = 25_000;
 
 export const PackageListingScreen = ({ navigation, route }: Props) => {
   const { countryId, heroCountry, coverageType } = route.params;
   const insets = useSafeAreaInsets();
   const offersQuery = useOffersByCountry(countryId, coverageType);
 
-  const [planType, setPlanType] = useState<PlanType>('standard');
   const [selectedOfferId, setSelectedOfferId] = useState<number | null>(null);
-  const [toggleDirection, setToggleDirection] = useState<'left' | 'right'>('right');
 
   const filteredOffers = useMemo(() => {
     const offers = offersQuery.data ?? [];
-    return offers.filter((offer) => {
-      const volumeMb = parseDataVolumeToMb(offer.dataVolume);
-      return planType === 'standard' ? volumeMb <= DATA_THRESHOLD_MB : volumeMb > DATA_THRESHOLD_MB;
-    });
-  }, [offersQuery.data, planType]);
+    return offers.filter((offer) => parseDataVolumeToMb(offer.dataVolume) >= UNLIMITED_SENTINEL_MB);
+  }, [offersQuery.data]);
 
   const groupedByDays = useMemo(() => groupOffersByDays(filteredOffers), [filteredOffers]);
 
@@ -64,32 +47,15 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
     [groupedByDays],
   );
 
-  const bestValueOfferId = useMemo<number | null>(() => {
-    const bestOffer = findBestValueOffer(filteredOffers);
-    return bestOffer ? bestOffer.id : null;
-  }, [filteredOffers]);
-
   const isBottomActionsVisible = selectedOfferId !== null;
 
   useEffect(() => {
-    if (!selectedOfferId) {
-      return;
-    }
+    if (!selectedOfferId) return;
     const stillVisible = filteredOffers.some((offer) => offer.id === selectedOfferId);
-    if (!stillVisible) {
-      setSelectedOfferId(null);
-    }
+    if (!stillVisible) setSelectedOfferId(null);
   }, [filteredOffers, selectedOfferId]);
 
   const countryLabel = heroCountry ? toTitleCase(heroCountry) : toTitleCase(countryId);
-
-  const handlePlanChange = (nextPlan: PlanType) => {
-    if (nextPlan === planType) {
-      return;
-    }
-    setToggleDirection(nextPlan === 'Illimité' ? 'right' : 'left');
-    setPlanType(nextPlan);
-  };
 
   const handleViewDetails = () => {
     if (selectedOfferId === null) {
@@ -151,56 +117,6 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.pagePadding}>
-          <Section>
-            <View style={styles.planToggle}>
-              <Pressable
-                accessibilityLabel="Afficher les forfaits standard"
-                accessibilityRole="button"
-                accessibilityState={{ selected: planType === 'standard' }}
-                onPress={() => handlePlanChange('standard')}
-                style={styles.planOption}
-              >
-                {planType === 'standard' ? (
-                  <Animated.View
-                    entering={
-                      toggleDirection === 'left'
-                        ? SlideInLeft.duration(Animation.duration.normal)
-                        : SlideInRight.duration(Animation.duration.normal)
-                    }
-                    exiting={FadeOut.duration(Animation.duration.normal)}
-                    style={styles.planActiveBackground}
-                  />
-                ) : null}
-                <Text style={[styles.planText, planType === 'standard' ? styles.planTextActive : undefined]}>
-                  Standard
-                </Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityLabel="Afficher les forfaits illimités"
-                accessibilityRole="button"
-                accessibilityState={{ selected: planType === 'Illimité' }}
-                onPress={() => handlePlanChange('Illimité')}
-                style={styles.planOption}
-              >
-                {planType === 'Illimité' ? (
-                  <Animated.View
-                    entering={
-                      toggleDirection === 'right'
-                        ? SlideInRight.duration(Animation.duration.normal)
-                        : SlideInLeft.duration(Animation.duration.normal)
-                    }
-                    exiting={FadeOut.duration(Animation.duration.normal)}
-                    style={styles.planActiveBackground}
-                  />
-                ) : null}
-                <Text style={[styles.planText, planType === 'Illimité' ? styles.planTextActive : undefined]}>
-                  Illimité
-                </Text>
-              </Pressable>
-            </View>
-          </Section>
-
           <Section style={styles.listSection}>
             {offersQuery.isLoading ? (
               <View style={styles.stateCard}>
@@ -213,14 +129,11 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
               <View style={styles.stateCard}>
                 <Ionicons color={colors.error.DEFAULT} name="alert-circle-outline" size={sizes.icon.xxl} />
                 <Text style={styles.stateText}>Erreur de chargement</Text>
-                <Pressable
-                  accessibilityLabel="Recharger les forfaits"
-                  accessibilityRole="button"
+                <PurpleButton
+                  label="Reessayer"
                   onPress={() => offersQuery.refetch()}
-                  style={({ pressed }) => [styles.retryButton, pressed ? styles.retryButtonPressed : undefined]}
-                >
-                  <Text style={styles.retryButtonText}>Reessayer</Text>
-                </Pressable>
+                  style={styles.retryButton}
+                />
               </View>
             ) : null}
 
@@ -232,19 +145,7 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
             ) : null}
 
             {!offersQuery.isLoading && !offersQuery.isError ? (
-              <Animated.View
-                entering={
-                  toggleDirection === 'right'
-                    ? SlideInRight.duration(Animation.duration.normal)
-                    : SlideInLeft.duration(Animation.duration.normal)
-                }
-                exiting={
-                  toggleDirection === 'right'
-                    ? SlideOutLeft.duration(Animation.duration.normal)
-                    : SlideOutRight.duration(Animation.duration.normal)
-                }
-                key={planType}
-              >
+              <View>
                 {sortedDays.map((days) => (
                   <Group key={days} style={styles.dayGroup}>
                     <View style={styles.dayHeaderRow}>
@@ -254,20 +155,20 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
 
                     {groupedByDays[days].map((offer, index) => (
                       <Animated.View
-                        entering={FadeInDown.delay(index * 30).duration(Animation.duration.normal)}
+                        entering={FadeInDown.delay(index * 30).duration(250)}
                         key={offer.id}
                       >
                         <PackageCard
                           offer={offer}
                           selected={selectedOfferId === offer.id}
-                          isBestValue={offer.id === bestValueOfferId}
                           onPress={() => setSelectedOfferId(offer.id)}
                         />
                       </Animated.View>
                     ))}
                   </Group>
                 ))}
-              </Animated.View>
+              
+            </View>
             ) : null}
           </Section>
         </View>
@@ -275,13 +176,15 @@ export const PackageListingScreen = ({ navigation, route }: Props) => {
 
 {isBottomActionsVisible ? (
   <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
-    <PrimaryButton
+    <OutlineButton
       label="Détails"
       onPress={handleViewDetails}
+      style={styles.footerButton}
     />
-    <PrimaryButton
+    <ActionButton
       label="Acheter maintenant"
       onPress={handleBuyNow}
+      style={styles.footerButton}
     />
   </View>
 ) : null}
@@ -302,27 +205,11 @@ const groupOffersByDays = (offers: Offer[]) => {
   return grouped;
 };
 
-const findBestValueOffer = (offers: Offer[]): Offer | null => {
-  let bestOffer: Offer | null = null;
-  let bestRatio = Number.POSITIVE_INFINITY;
-
-  offers.forEach((offer) => {
-    const dataMb = parseDataVolumeToMb(offer.dataVolume);
-    if (dataMb <= 0) {
-      return;
-    }
-    const ratio = offer.price / dataMb;
-    if (ratio < bestRatio) {
-      bestRatio = ratio;
-      bestOffer = offer;
-    }
-  });
-
-  return bestOffer;
-};
+const UNLIMITED_SENTINEL_MB = 999_999;
 
 const parseDataVolumeToMb = (rawVolume: string) => {
   const value = rawVolume.trim().toUpperCase();
+  if (value === 'ILLIMITÉ' || value === 'ILLIMITE') return UNLIMITED_SENTINEL_MB;
   if (value.includes('GB')) {
     const numeric = Number(value.replace('GB', '').trim());
     return Number.isFinite(numeric) ? numeric * 1024 : 0;
@@ -385,6 +272,7 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: spacing.xs,
   },
+  
   scrollContent: {
     paddingTop: spacing.lg,
   },
@@ -393,41 +281,6 @@ const styles = StyleSheet.create({
   },
   listSection: {
     marginBottom: spacing.xl,
-  },
-  planToggle: {
-    borderRadius: radii.card,
-    flexDirection: 'row',
-    padding: spacing.xs,
-  },
-  planOption: {
-    alignItems: 'center',
-    borderRadius: radii.lg,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: sizes.touch.sm,
-    overflow: 'hidden',
-    paddingVertical: spacing.sm,
-    position: 'relative',
-  },
-  planActiveBackground: {
-    backgroundColor: colors.primary.DEFAULT,
-    borderRadius: radii.lg,
-    bottom: spacing.xs,
-    left: spacing.xs,
-    position: 'absolute',
-    right: spacing.xs,
-    top: spacing.xs,
-    ...shadows.medium,
-  },
-  planText: {
-    ...typography.bodyMD,
-    color: colors.primary.DEFAULT,
-    fontWeight: '600',
-    zIndex: 1,
-  },
-  planTextActive: {
-    color: colors.white,
-    fontWeight: '700',
   },
   dayGroup: {
     marginBottom: spacing.xl,
@@ -466,21 +319,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primary.DEFAULT,
-    borderRadius: radii.lg,
     marginTop: spacing.md,
-    minHeight: sizes.touch.sm,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+    alignSelf: 'center',
   },
-  retryButtonPressed: {
-    backgroundColor: colors.state.primaryPressed,
-    transform: [{ scale: 0.98 }],
-    ...shadows.low,
-  },
-  retryButtonText: {
-    ...typography.labelMD,
-    color: colors.text.onPrimary,
+  footerButton: {
+    flex: 1,
   },
 });

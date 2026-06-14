@@ -95,8 +95,14 @@ export class PurchaseResponseDto {
   @ApiPropertyOptional({ example: 'PENDING' })
   status?: string;
 
-  @ApiProperty({ example: 'SUCCESS' })
-  message: string;
+  @ApiPropertyOptional({ example: 'B2C' })
+  channel?: string;
+
+  @ApiPropertyOptional({ example: 'https://gateway.example.com/form' })
+  paymentUrl?: string;
+
+  @ApiPropertyOptional({ example: 'SUCCESS' })
+  message?: string;
 
   @ApiPropertyOptional({ example: 'Card declined' })
   error?: string;

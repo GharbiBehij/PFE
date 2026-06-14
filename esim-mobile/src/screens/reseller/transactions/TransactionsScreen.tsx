@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import {
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -19,6 +20,7 @@ import {
 } from '../../../hooks/reseller/useTransactions';
 import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../../theme';
 import { formatCurrency } from '../../../utils/formatCurrency';
+import { PurpleButton } from '../../../components/Buttons';
 
 type FilterValue = 'all' | 'completed' | 'pending' | 'failed';
 
@@ -157,6 +159,16 @@ export const TransactionsScreen = () => {
   const hasResults = groupedTransactions.length > 0;
   const isSearching = searchQuery.trim().length > 0;
 
+  // TODO: replace with real API data
+  const handleExport = async () => {
+    const header = 'Date,Client,Offre,Montant,Statut';
+    const rows = filteredTransactions.map((t) =>
+      [t.date, `"${t.customer}"`, `"${t.package}"`, t.amount, t.status].join(','),
+    );
+    const csv = [header, ...rows].join('\n');
+    await Share.share({ message: csv, title: 'transactions.csv' });
+  };
+
   return (
     <ScreenShell>
       {/* 🔹 HEADER — matches HomeScreen pattern */}
@@ -169,17 +181,17 @@ export const TransactionsScreen = () => {
           <TouchableOpacity
             accessibilityRole="button"
             activeOpacity={0.85}
-            onPress={() => {}}
+            onPress={handleExport}
             style={styles.iconButton}
           >
-            <Ionicons color={colors.primary.DEFAULT} name="download-outline" size={sizes.icon.md} />
+            <Ionicons color={colors.text.onPrimary} name="download-outline" size={sizes.icon.md} />
           </TouchableOpacity>
         </View>
 
         {/* Search — matches HomeScreen search bar pattern */}
         <View style={styles.searchFieldWrap}>
           <Ionicons
-            color={colors.text.secondary}
+            color={colors.state.onPrimaryOverlay70}
             name="search"
             size={sizes.icon.sm}
             style={styles.searchIcon}
@@ -187,7 +199,7 @@ export const TransactionsScreen = () => {
           <TextInput
             onChangeText={setSearchQuery}
             placeholder="Rechercher une transaction..."
-            placeholderTextColor={colors.text.tertiary}
+            placeholderTextColor={colors.state.onPrimaryOverlay50}
             style={styles.searchInput}
             value={searchQuery}
           />
@@ -241,13 +253,12 @@ export const TransactionsScreen = () => {
           {/* Summary cards — overlap header bottom */}
           <View style={styles.summaryRow}>
             <View style={[styles.summaryCard, styles.summaryCardLeft]}>
-              <View style={styles.summaryIconWrap}>
-                <Ionicons
-                  color={colors.text.secondary}
-                  name="bar-chart-outline"
-                  size={sizes.icon.sm}
-                />
-              </View>
+              <Ionicons
+                color={colors.text.secondary}
+                name="bar-chart-outline"
+                size={sizes.icon.sm}
+                style={styles.summaryIcon}
+              />
               <Text style={styles.summaryLabel}>Total des ventes</Text>
               <Text style={styles.summaryValueDark}>
                 {formatCurrency(totalAmount)}
@@ -260,13 +271,12 @@ export const TransactionsScreen = () => {
             </View>
 
             <View style={[styles.summaryCard, styles.summaryCardRight]}>
-              <View style={styles.summaryIconWrapPrimary}>
-                <Ionicons
-                  color={colors.primary.DEFAULT}
-                  name="trending-up-outline"
-                  size={sizes.icon.sm}
-                />
-              </View>
+              <Ionicons
+                color={colors.primary.DEFAULT}
+                name="trending-up-outline"
+                size={sizes.icon.sm}
+                style={styles.summaryIcon}
+              />
               <Text style={styles.summaryLabel}>Commission</Text>
               <Text style={styles.summaryValue}>
                 {formatCurrency(totalCommission)}
@@ -314,18 +324,15 @@ export const TransactionsScreen = () => {
                   : 'Essayez de modifier vos filtres'}
               </Text>
               {isSearching || activeFilter !== 'all' ? (
-                <TouchableOpacity
-                  activeOpacity={0.85}
+                <PurpleButton
+                  label="Réinitialiser les filtres"
                   onPress={() => {
                     setSearchQuery('');
                     setActiveFilter('all');
                   }}
+                  size="sm"
                   style={styles.resetFiltersBtn}
-                >
-                  <Text style={styles.resetFiltersBtnText}>
-                    Réinitialiser les filtres
-                  </Text>
-                </TouchableOpacity>
+                />
               ) : null}
             </View>
           ) : (
@@ -439,6 +446,8 @@ const styles = StyleSheet.create({
   /* ── HEADER — mirrors HomeScreen ── */
   header: {
     ...patterns.headerShell,
+    backgroundColor: colors.primary.DEFAULT,
+    borderBottomColor: colors.primary.dark,
     borderBottomLeftRadius: radii.card,
     borderBottomRightRadius: radii.card,
   },
@@ -454,19 +463,19 @@ const styles = StyleSheet.create({
   },
   greetingSub: {
     ...typography.bodySM,
-    color: colors.text.secondary,
+    color: colors.state.onPrimaryOverlay80,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   headerTitle: {
     ...typography.titleLG,
-    color: colors.text.primary,
+    color: colors.text.onPrimary,
   },
   iconButton: {
     height: sizes.touch.sm,
     width: sizes.touch.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.primary[100],
+    backgroundColor: colors.state.onPrimaryOverlay18,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.medium,
@@ -479,13 +488,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: sizes.touch.sm,
     paddingHorizontal: spacing.md,
+    backgroundColor: colors.primary[800],
+    borderColor: colors.primary[900],
   },
   searchIcon: {
     marginRight: spacing.sm,
   },
   searchInput: {
     ...typography.bodyMD,
-    color: colors.text.primary,
+    color: colors.text.onPrimary,
     flex: 1,
     paddingVertical: spacing.sm,
   },
@@ -552,23 +563,8 @@ const styles = StyleSheet.create({
   summaryCardRight: {
     borderTopColor: colors.primary.DEFAULT,
   },
-  summaryIconWrap: {
-    alignItems: 'center',
-    backgroundColor: colors.gray[100],
-    borderRadius: radii.sm,
-    height: 28,
-    justifyContent: 'center',
+  summaryIcon: {
     marginBottom: spacing.sm,
-    width: 28,
-  },
-  summaryIconWrapPrimary: {
-    alignItems: 'center',
-    backgroundColor: colors.primary[100],
-    borderRadius: radii.sm,
-    height: 28,
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-    width: 28,
   },
   summaryLabel: {
     ...typography.bodySM,
@@ -737,9 +733,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.gray[100],
     borderRadius: radii.full,
-    height: 72,
+    height: sizes.iconWrap.lg,
     justifyContent: 'center',
-    width: 72,
+    width: sizes.iconWrap.lg,
   },
   emptyStateTitle: {
     ...typography.titleSM,
@@ -755,16 +751,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   resetFiltersBtn: {
-    alignItems: 'center',
-    backgroundColor: colors.primary[100],
-    borderRadius: radii.lg,
     marginTop: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-  },
-  resetFiltersBtnText: {
-    ...typography.labelMD,
-    color: colors.primary.DEFAULT,
-    fontWeight: '700',
   },
 });

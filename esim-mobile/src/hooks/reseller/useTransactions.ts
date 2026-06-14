@@ -121,7 +121,7 @@ export const fetchResellerTransactions = async (): Promise<ResellerTransaction[]
       package: buildPackageLabel(offer),
       country: offer?.country ?? '-',
       amount: toMajorUnits(transaction.amount),
-      commission: toMajorUnits(offer?.InternalMargin ?? 0),
+      commission: toMajorUnits(transaction.amount) * (offer?.InternalMargin ?? 15) / 100,
       status: toStatus(transaction.status),
       date: toDateKey(createdAt),
       time: toTimeKey(createdAt),

@@ -4,10 +4,13 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { apiClient } from '../../api/client';
 import { useAuth } from './useAuth';
+import { addNotification } from '../../storage/notificationsStorage';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -20,6 +23,15 @@ export const usePushNotifications = () => {
     if (!user || !Device.isDevice) return;
     registerForPushNotifications();
   }, [user?.id]);
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const title = notification.request.content.title ?? 'Notification';
+      const body = notification.request.content.body ?? '';
+      void addNotification({ title, body });
+    });
+    return () => sub.remove();
+  }, []);
 };
 
 async function registerForPushNotifications(): Promise<void> {

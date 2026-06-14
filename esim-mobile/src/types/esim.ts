@@ -1,6 +1,6 @@
 import type { Offer } from './offer';
 
-export type EsimStatus = 'NOT_ACTIVE' | 'ACTIVE' | 'EXPIRED' | 'DELETED';
+export type EsimStatus = 'NOT_ACTIVE' | 'ACTIVE' | 'EXPIRED' | 'DELETED' | 'FAILED';
 
 export interface Esim {
   id: string;
@@ -11,7 +11,8 @@ export interface Esim {
   dataTotal?: number;
   expiryDate?: string;
   country: string;
-  countryCode: string;
+  countryCode?: string;
   offer?: Offer;
   createdAt: string;
+  transactionId?: string;
 }

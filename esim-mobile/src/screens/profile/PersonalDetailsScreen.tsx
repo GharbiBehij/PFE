@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -14,7 +14,7 @@ import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
 import { useProfile, useUpdateProfile } from '../../hooks/client/useProfile';
 import type { ProfileStackParamList } from '../../navigation/types';
-import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../theme';
+import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'PersonalDetails'>;
 
@@ -28,49 +28,48 @@ export const PersonalDetailsScreen = ({ navigation }: Props) => {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
+  const initialValues = useRef({ firstname: '', lastname: '', email: '', phone: '' });
+
+  const isDirty =
+    firstname !== initialValues.current.firstname ||
+    lastname !== initialValues.current.lastname ||
+    email !== initialValues.current.email ||
+    phone !== initialValues.current.phone;
+
   const getErrorMessage = (error: unknown) => {
     if (error instanceof Error && error.message.trim().length > 0) {
       return error.message;
     }
-
     if (typeof error === 'object' && error !== null && 'response' in error) {
       const response = (error as { response?: { data?: { message?: string | string[] } } }).response;
       const apiMessage = response?.data?.message;
-
-      if (Array.isArray(apiMessage) && apiMessage.length > 0) {
-        return apiMessage.join(', ');
-      }
-
-      if (typeof apiMessage === 'string' && apiMessage.trim().length > 0) {
-        return apiMessage;
-      }
+      if (Array.isArray(apiMessage) && apiMessage.length > 0) return apiMessage.join(', ');
+      if (typeof apiMessage === 'string' && apiMessage.trim().length > 0) return apiMessage;
     }
-
     return 'Mise à jour impossible.';
   };
 
   useEffect(() => {
-    if (!profileQuery.data) {
-      return;
-    }
-
-    setFirstname(profileQuery.data.firstname ?? '');
-    setLastname(profileQuery.data.lastname ?? '');
-    setEmail(profileQuery.data.email ?? '');
-    setPhone(profileQuery.data.phone ?? '');
+    if (!profileQuery.data) return;
+    const initial = {
+      firstname: profileQuery.data.firstname ?? '',
+      lastname: profileQuery.data.lastname ?? '',
+      email: profileQuery.data.email ?? '',
+      phone: profileQuery.data.phone ?? '',
+    };
+    initialValues.current = initial;
+    setFirstname(initial.firstname);
+    setLastname(initial.lastname);
+    setEmail(initial.email);
+    setPhone(initial.phone);
   }, [profileQuery.data]);
 
   const onSave = async () => {
     setSuccessMessage('');
     setErrorMessage('');
-
     try {
-      await updateMutation.mutateAsync({
-        firstname,
-        lastname,
-        email,
-        phone,
-      });
+      await updateMutation.mutateAsync({ firstname, lastname, email, phone });
+      initialValues.current = { firstname, lastname, email, phone };
       setSuccessMessage('Profil mis à jour avec succès.');
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -93,7 +92,10 @@ export const PersonalDetailsScreen = ({ navigation }: Props) => {
       <ScreenShell>
         <ScreenContent scrollable={false}>
           <View style={styles.errorState}>
-            <ErrorBanner message="Impossible de charger le profil." onRetry={() => profileQuery.refetch()} />
+            <ErrorBanner
+              message="Impossible de charger le profil."
+              onRetry={() => profileQuery.refetch()}
+            />
           </View>
         </ScreenContent>
       </ScreenShell>
@@ -108,7 +110,10 @@ export const PersonalDetailsScreen = ({ navigation }: Props) => {
             accessibilityLabel="Retour au profil"
             accessibilityRole="button"
             onPress={() => navigation.navigate('Profile')}
-            style={({ pressed }) => [styles.headerBackButton, pressed ? styles.headerBackButtonPressed : undefined]}
+            style={({ pressed }) => [
+              styles.headerBackButton,
+              pressed ? styles.headerBackButtonPressed : undefined,
+            ]}
           >
             <Ionicons color={colors.text.primary} name="arrow-back" size={sizes.icon.md} />
           </Pressable>
@@ -123,32 +128,55 @@ export const PersonalDetailsScreen = ({ navigation }: Props) => {
 
       <ScreenContent contentContainerStyle={styles.contentContainer}>
         <Section>
+          {/* ── Form card ── */}
           <View style={styles.card}>
             <Field label="Prenom" onChangeText={setFirstname} value={firstname} />
             <Field label="Nom" onChangeText={setLastname} value={lastname} />
-            <Field autoCapitalize="none" keyboardType="email-address" label="E-mail" onChangeText={setEmail} value={email} />
-            <Field keyboardType="phone-pad" label="Telephone" onChangeText={setPhone} value={phone} />
+            <Field
+              autoCapitalize="none"
+              keyboardType="email-address"
+              label="E-mail"
+              onChangeText={setEmail}
+              value={email}
+            />
+            <Field
+              keyboardType="phone-pad"
+              label="Telephone"
+              onChangeText={setPhone}
+              value={phone}
+            />
 
             {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
-            {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
+            {successMessage ? (
+              <Text style={styles.successText}>{successMessage}</Text>
+            ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Enregistrer les modifications du profil"
-              accessibilityState={{ disabled: updateMutation.isPending }}
-              disabled={updateMutation.isPending}
-              onPress={onSave}
-              style={({ pressed }) => [
-                styles.saveButton,
-                pressed ? styles.saveButtonPressed : undefined,
-                updateMutation.isPending ? styles.saveButtonDisabled : undefined,
-              ]}
-            >
-              <Text style={styles.saveButtonText}>
-                {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
-              </Text>
-            </Pressable>
+            {isDirty && !successMessage ? (
+              <View style={styles.dirtyBanner}>
+                <Ionicons name="ellipse" size={7} color={colors.warning.DEFAULT} />
+                <Text style={styles.dirtyText}>Modifications non enregistrées</Text>
+              </View>
+            ) : null}
           </View>
+
+          {/* ── Save action — card row ── */}
+          <Pressable
+            disabled={updateMutation.isPending}
+            onPress={onSave}
+            style={({ pressed }) => [
+              styles.saveCard,
+              pressed && styles.saveCardPressed,
+              updateMutation.isPending && styles.saveCardDisabled,
+            ]}
+          >
+            <View style={styles.saveIconWrap}>
+              <Ionicons color={colors.white} name="checkmark" size={sizes.icon.sm} />
+            </View>
+            <Text style={styles.saveLabel}>
+              {updateMutation.isPending ? 'Enregistrement...' : 'Enregistrer les modifications'}
+            </Text>
+            <Ionicons color={colors.text.tertiary} name="chevron-forward" size={sizes.icon.sm} />
+          </Pressable>
         </Section>
       </ScreenContent>
     </ScreenShell>
@@ -230,8 +258,11 @@ const styles = StyleSheet.create({
     ...patterns.screenPadding,
     paddingTop: spacing.xl,
   },
+
+  // ── Form card ──
   card: {
     ...patterns.card,
+    padding: spacing.lg,
   },
   fieldWrap: {
     marginBottom: spacing.lg,
@@ -252,18 +283,47 @@ const styles = StyleSheet.create({
     color: colors.success.DEFAULT,
     marginTop: spacing.xs,
   },
-  saveButton: {
-    ...patterns.ctaPrimary,
+  dirtyBanner: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
     marginTop: spacing.md,
   },
-  saveButtonPressed: {
-    ...patterns.ctaPrimaryPressed,
+  dirtyText: {
+    ...typography.bodySM,
+    color: colors.warning.dark,
+    fontWeight: '600',
   },
-  saveButtonDisabled: {
-    ...patterns.ctaPrimaryDisabled,
+
+  // ── Save action ──
+  saveCard: {
+    ...patterns.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    gap: spacing.md,
+    padding: spacing.lg,
   },
-  saveButtonText: {
-    ...typography.labelMD,
-    color: colors.text.onPrimary,
+  saveCardPressed: {
+    backgroundColor: colors.state.hover,
+    transform: [{ scale: 0.98 }],
+  },
+  saveCardDisabled: {
+    opacity: 0.5,
+  },
+  saveIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary.DEFAULT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveLabel: {
+    ...typography.bodyMD,
+    color: colors.text.primary,
+    flex: 1,
+    fontWeight: '600',
   },
 });

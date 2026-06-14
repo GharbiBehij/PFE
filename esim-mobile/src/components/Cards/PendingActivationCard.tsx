@@ -1,7 +1,7 @@
 // components/reseller/PendingActivationCard.tsx
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Card } from './Card';
-import { PrimaryButton } from '../PrimaryButton';
+import { ActionButton } from '../Buttons/ActionButton';
 import { colors, patterns, spacing, typography } from '../../theme';
 import type { PendingActivation } from '../../types/reseller';
 
@@ -9,6 +9,7 @@ type Props = {
   activation: PendingActivation;
   formattedAmount: string;
   formattedDate: string;
+  onPress: () => void;
   onPressActivate: () => void;
 };
 
@@ -16,9 +17,11 @@ export const PendingActivationCard = ({
   activation,
   formattedAmount,
   formattedDate,
+  onPress,
   onPressActivate,
 }: Props) => {
   return (
+    <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
     <Card style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.details}>
@@ -34,12 +37,13 @@ export const PendingActivationCard = ({
       <Text style={styles.date}>{`Acheté le ${formattedDate}`}</Text>
 
       <View style={styles.buttonWrap}>
-        <PrimaryButton
+        <ActionButton
           label="Activer maintenant"
           onPress={onPressActivate}
         />
       </View>
     </Card>
+    </TouchableOpacity>
   );
 };
 

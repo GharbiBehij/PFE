@@ -28,11 +28,11 @@ const toFrenchStatus = (status: string) => {
     FAILED: 'Échoué',
   };
 
-  return labels[status] ?? status;
+  return labels[status.toUpperCase()] ?? status;
 };
 
 export const StatusBadge = ({ status }: StatusBadgeProps) => {
-  const style = statusColors[status] ?? {
+  const style = statusColors[status.toUpperCase()] ?? {
     background: colors.primary[100],
     border: colors.primary[200],
     text: colors.primary.dark,
@@ -48,14 +48,14 @@ export const StatusBadge = ({ status }: StatusBadgeProps) => {
 const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
-    borderColor: colors.border,
-    borderRadius: radii.sm,
+    borderRadius: radii.full,
     borderWidth: 1,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.sm + spacing.xxs,
     paddingVertical: spacing.xs,
   },
   text: {
-    ...typography.bodySM,
-    fontWeight: '600',
+    fontSize: typography.overline.fontSize,
+    fontWeight: '700',
+    lineHeight: typography.overline.lineHeight,
   },
 });

@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import {
+  BackHandler,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { ActionButton, OutlineButton } from '../../components/Buttons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,139 +18,172 @@ import Animated, {
   withTiming,
   withDelay,
 } from 'react-native-reanimated';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import QRCode from 'react-native-qrcode-svg';
 import { useTransactionById } from '../../hooks/client/usePayment';
+import { useEsimSocket } from '../../hooks/useEsimSocket';
 import type { HomeStackParamList } from '../../navigation/types';
-import { colors, radii, spacing, typography } from '../../theme';
+import type { TransactionStatus } from '../../types/payment';
+import { colors, radii, shadows, sizes, spacing, typography } from '../../theme';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'EsimSuccess'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'PaymentSuccess'>;
+
+// Statuses that mean the eSIM is fully provisioned
+const SUCCESS_STATUSES: TransactionStatus[] = ['COMPLETED', 'SUCCEEDED'];
 
 export const SuccessScreen = ({ navigation, route }: Props) => {
-  const { transactionId } = route.params;
-  const [shared, setShared] = useState(false);
+  const { transactionId, channel } = route.params;
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [shouldPoll, setShouldPoll] = useState(true);
 
-  const { data: transaction } = useTransactionById(String(transactionId), false);
-  const activationCode = transaction?.esim?.activationCode ?? '';
+  // Poll every 2 s until a terminal status is reached
+  const { data: transaction } = useTransactionById(
+    String(transactionId),
+    shouldPoll ? 2000 : false,
+  );
+  const status: TransactionStatus = transaction?.status ?? 'PAID';
 
-  const circleScale   = useSharedValue(0);
-  const circleRotate  = useSharedValue(-180);
+  // Derive activation code (fallback to deterministic demo code)
+  const esimData = (transaction as any)?.esims?.[0] ?? transaction?.esim;
+  const activationCode = esimData?.activationCode ?? esimData?.qrCode ?? '';
+  const displayCode = activationCode || `LPA:1$mock.netyfly.com$${String(transactionId)}`;
+
+  const navigateToSuccess = useCallback(() => {
+    setShouldPoll(false);
+    queryClient.invalidateQueries({ queryKey: ['transaction', String(transactionId)] });
+    queryClient.invalidateQueries({ queryKey: ['esims'] });
+    queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    navigation.replace('EsimSuccess', { transactionId, channel });
+  }, [navigation, queryClient, transactionId, channel]);
+
+  // Socket — primary path
+  useEsimSocket({
+    onActivated: () => navigateToSuccess(),
+    onFailed: ({ transactionId: failedId }) => {
+      setShouldPoll(false);
+      navigation.replace('EsimFailed', { transactionId: failedId });
+    },
+  });
+
+  // Polling fallback — act on terminal status from server
+  useEffect(() => {
+    if (SUCCESS_STATUSES.includes(status)) {
+      navigateToSuccess();
+    } else if (status === 'FAILED') {
+      setShouldPoll(false);
+      navigation.replace('EsimFailed', { transactionId });
+    } else if (status === 'EXPIRED') {
+      setShouldPoll(false);
+      navigation.replace('EsimExpired', { transactionId });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  // Block Android back: provisioning must complete before user can leave
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+      return () => sub.remove();
+    }, []),
+  );
+
+  // ── Entrance animations ──────────────────────────────────────────────────
+  const circleScale    = useSharedValue(0);
+  const circleRotate   = useSharedValue(-180);
   const contentOpacity = useSharedValue(0);
-  const contentY      = useSharedValue(20);
-  const cardY         = useSharedValue(50);
-  const cardOpacity   = useSharedValue(0);
+  const contentY       = useSharedValue(20);
 
   useEffect(() => {
-    circleScale.value  = withSpring(1, { damping: 12 });
-    circleRotate.value = withSpring(0, { damping: 12 });
+    circleScale.value    = withSpring(1, { damping: 12 });
+    circleRotate.value   = withSpring(0, { damping: 12 });
     contentOpacity.value = withDelay(200, withTiming(1, { duration: 300 }));
     contentY.value       = withDelay(200, withTiming(0, { duration: 300 }));
-    cardY.value      = withDelay(400, withSpring(0, { damping: 14 }));
-    cardOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const circleStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: circleScale.value },
-      { rotate: `${circleRotate.value}deg` },
-    ],
+  const circleStyle  = useAnimatedStyle(() => ({
+    transform: [{ scale: circleScale.value }, { rotate: `${circleRotate.value}deg` }],
   }));
-
   const contentStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
     transform: [{ translateY: contentY.value }],
   }));
 
-  const cardStyle = useAnimatedStyle(() => ({
-    opacity: cardOpacity.value,
-    transform: [{ translateY: cardY.value }],
-  }));
-
-  const handleShare = async () => {
-    if (!activationCode) return;
-    await Share.share({ message: activationCode });
-    setShared(true);
-    setTimeout(() => setShared(false), 2000);
-  };
-
-  const goToEsims = () => {
-    navigation.getParent()?.navigate('EsimsTab' as never);
-  };
-
   const goHome = () => {
-    navigation.getParent()?.navigate('HomeTab' as never);
+    setShouldPoll(false);
+    (navigation.getParent() as any)?.navigate('HomeTab', { screen: 'Home' });
   };
+
+  const bottomPad = Math.max(spacing.lg, insets.bottom);
+  const contentPaddingBottom = sizes.touch.lg + sizes.touch.md + spacing.md * 2 + spacing.sm + bottomPad + spacing.xl;
 
   return (
     <View style={styles.root}>
-      {/* Background blobs */}
-      <View style={styles.blobTop} />
-      <View style={styles.blobBottom} />
+      <StatusBar barStyle="light-content" />
+      {/* blobs in their own overflow-hidden layer so they don't clip the bottomBar */}
+      <View style={styles.bgWrap}>
+        <View style={styles.blobTop} />
+        <View style={styles.blobBottom} />
+      </View>
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: insets.top + spacing.xl,
+            paddingBottom: contentPaddingBottom,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Animated checkmark circle */}
+        {/* ── Checkmark medallion ─────────────────────────────────────── */}
         <Animated.View style={[styles.circleWrap, circleStyle]}>
           <View style={styles.circle}>
-            <Ionicons name="checkmark" size={48} color={colors.primary.DEFAULT} />
+            <Ionicons name="checkmark" size={sizes.icon.xxl} color={colors.primary.DEFAULT} />
           </View>
         </Animated.View>
 
-        {/* Title block */}
-        <Animated.View style={[styles.titleWrap, contentStyle]}>
+        {/* ── Title + subtitle ─────────────────────────────────────────── */}
+        <Animated.View style={[styles.textWrap, contentStyle]}>
           <Text style={styles.title}>Paiement réussi !</Text>
           <Text style={styles.subtitle}>Votre eSIM est prête à être activée.</Text>
         </Animated.View>
 
-        {/* White card */}
-        <Animated.View style={[styles.card, cardStyle]}>
-          {/* QR code */}
-          <View style={styles.qrWrap}>
-            {activationCode ? (
-              <QRCode value={activationCode} size={200} />
-            ) : (
-              <View style={styles.qrPlaceholder}>
-                <Text style={styles.qrPlaceholderText}>Code QR</Text>
-              </View>
-            )}
+        {/* ── White card (QR + code) ───────────────────────────────────── */}
+        <Animated.View style={[styles.mainCard, contentStyle]}>
+          {/* QR frame */}
+          <View style={styles.qrFrame}>
+            <QRCode value={displayCode} size={sizes.decoration.qrPayment} />
           </View>
 
-          {/* Activation code row */}
-          <View style={styles.codeRow}>
-            <Text style={styles.codeText} ellipsizeMode="middle" numberOfLines={1}>
-              {activationCode || '—'}
+          {/* LPA code bar */}
+          <View style={styles.lpaBar}>
+            <Text style={styles.lpaCode} numberOfLines={1} ellipsizeMode="tail">
+              {displayCode}
             </Text>
-            <Pressable
-              onPress={() => { void handleShare(); }}
-              style={({ pressed }) => [styles.copyBtn, pressed && styles.copyBtnPressed]}
-            >
-              <Ionicons
-                name={shared ? 'checkmark' : 'copy-outline'}
-                size={18}
-                color={colors.primary.DEFAULT}
-              />
+            <Pressable style={styles.shareBtn}>
+              <Ionicons name="share-outline" size={sizes.icon.sm2} color={colors.primary.DEFAULT} />
             </Pressable>
           </View>
-
-          {/* Primary CTA */}
-          <Pressable
-            onPress={goToEsims}
-            style={({ pressed }) => [styles.primaryBtn, pressed && styles.primaryBtnPressed]}
-          >
-            <Ionicons name="phone-portrait-outline" size={18} color={colors.gray[900]} />
-            <Text style={styles.primaryBtnText}>Activer l'eSIM</Text>
-          </Pressable>
-
-          {/* Secondary CTA */}
-          <Pressable
-            onPress={goHome}
-            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.secondaryBtnPressed]}
-          >
-            <Text style={styles.secondaryBtnText}>Retour à l'accueil</Text>
-          </Pressable>
         </Animated.View>
       </ScrollView>
+
+      {/* ── Bottom action bar ─────────────────────────────────────────── */}
+      <View style={[styles.bottomBar, { paddingBottom: bottomPad }]}>
+        <ActionButton
+          icon="phone-portrait-outline"
+          label="Activer l'eSIM"
+          onPress={navigateToSuccess}
+        />
+        <OutlineButton
+          label="Retour à l'accueil"
+          onPress={goHome}
+          size="sm"
+        />
+      </View>
     </View>
   );
 };
@@ -150,172 +192,137 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.primary.DEFAULT,
+  },
+
+  // ── Blob layer (overflow hidden isolated so bottomBar isn't clipped) ────────
+  bgWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     overflow: 'hidden',
   },
   blobTop: {
     position: 'absolute',
     top: '25%',
     left: '25%',
-    width: 256,
-    height: 256,
-    borderRadius: 128,
+    width: sizes.decoration.authBlobSm,
+    height: sizes.decoration.authBlobSm,
+    borderRadius: radii.full,
     backgroundColor: colors.primary.light,
     opacity: 0.5,
   },
   blobBottom: {
     position: 'absolute',
     bottom: '25%',
-    right: '25%',
-    width: 384,
-    height: 384,
-    borderRadius: 192,
+    right: '20%',
+    width: sizes.decoration.successBlobLg,
+    height: sizes.decoration.successBlobLg,
+    borderRadius: radii.full,
     backgroundColor: colors.primary[700],
     opacity: 0.5,
   },
+
+  // ── ScrollView ─────────────────────────────────────────────────────────────
   scroll: {
     flexGrow: 1,
-    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxxxxl,
-    paddingBottom: spacing.xxxl,
+    gap: spacing.lg,
+    alignItems: 'center',
   },
+
+  // ── Checkmark medallion ────────────────────────────────────────────────────
   circleWrap: {
-    marginBottom: spacing.xxl,
+    alignItems: 'center',
   },
   circle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: sizes.decoration.checkCircle,
+    height: sizes.decoration.checkCircle,
+    borderRadius: radii.full,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
+    ...shadows.floatCircle,
   },
-  titleWrap: {
+
+  // ── Title + subtitle ───────────────────────────────────────────────────────
+  textWrap: {
     alignItems: 'center',
-    marginBottom: spacing.xxl,
+    width: '100%',
   },
   title: {
     ...typography.titleLG,
     color: colors.white,
     fontWeight: '700',
     marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   subtitle: {
     ...typography.bodyMD,
     color: colors.primary[200],
     textAlign: 'center',
-    maxWidth: 280,
   },
-  card: {
+
+  // ── White card ─────────────────────────────────────────────────────────────
+  mainCard: {
     backgroundColor: colors.white,
     borderRadius: radii.xxl,
     padding: spacing.xl,
-    width: '100%',
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.25,
-    shadowRadius: 32,
-    elevation: 16,
+    ...shadows.cardDeep,
+    gap: spacing.md,
+    alignSelf: 'stretch',
   },
-  qrWrap: {
-    aspectRatio: 1,
+
+  // QR frame (dashed border)
+  qrFrame: {
     backgroundColor: colors.gray[100],
     borderRadius: radii.lg,
-    marginBottom: spacing.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: colors.gray[300],
-    overflow: 'hidden',
     padding: spacing.lg,
-  },
-  qrPlaceholder: {
+    borderWidth: 2,
+    borderColor: colors.gray[300],
+    borderStyle: 'dashed',
     alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
   },
-  qrPlaceholderText: {
-    ...typography.bodyMD,
-    color: colors.gray[400],
-    fontWeight: '500',
-  },
-  codeRow: {
+
+  // LPA code bar
+  lpaBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.gray[50],
     borderRadius: radii.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.xl,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.gray[100],
   },
-  codeText: {
-    ...typography.bodySM,
-    color: colors.gray[600],
-    fontFamily: 'monospace',
+  lpaCode: {
     flex: 1,
+    ...typography.mono,
+    fontSize: 12,
+    color: colors.gray[600],
     marginRight: spacing.md,
   },
-  copyBtn: {
+  shareBtn: {
     padding: spacing.sm,
     backgroundColor: colors.white,
     borderRadius: radii.sm,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...shadows.low,
   },
-  copyBtnPressed: {
-    backgroundColor: colors.gray[100],
-  },
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.secondary.DEFAULT,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.md,
-    shadowColor: colors.secondary.DEFAULT,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  primaryBtnPressed: {
-    backgroundColor: colors.secondary.dark,
-    transform: [{ scale: 0.98 }],
-  },
-  primaryBtnText: {
-    ...typography.labelMD,
-    color: colors.gray[900],
-    fontWeight: '700',
-  },
-  secondaryBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-  },
-  secondaryBtnPressed: {
-    backgroundColor: colors.gray[50],
-    transform: [{ scale: 0.98 }],
-  },
-  secondaryBtnText: {
-    ...typography.labelMD,
-    color: colors.gray[600],
-    fontWeight: '700',
+
+  // ── Bottom action bar — identical to B2BSellSuccessScreen ─────────────────
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'column',
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    gap: spacing.xs,
+    ...shadows.high,
   },
 });

@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { navigateTo } from '../../navigation/navigationRef';
 import type { AuthStackParamList } from '../../navigation/types';
+import { navigationRef } from '../../navigation/navigationRef';
 import { colors, radii, shadows, sizes, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Onboarding'>;
@@ -203,8 +203,8 @@ export const OnboardingScreen = ({ navigation, route }: Props) => {
         resizeMode="cover"
       >
         <LinearGradient
-          colors={[colors.transparent, 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.85)']}
-          locations={[0, 0.4, 1]}
+          colors={[colors.transparent, colors.overlayLight, colors.overlayStrong]}
+          locations={[spacing[0], 0.4, 1]}
           style={StyleSheet.absoluteFillObject}
         />
       </ImageBackground>
@@ -242,7 +242,7 @@ export const OnboardingScreen = ({ navigation, route }: Props) => {
         >
           <Ionicons
             name="airplane"
-            size={28}
+            size={sizes.icon.lg}
             color={colors.secondary.DEFAULT}
             style={styles.planeIcon}
           />
@@ -258,6 +258,22 @@ export const OnboardingScreen = ({ navigation, route }: Props) => {
         <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
           connecté partout dans le monde
         </Animated.Text>
+      </Animated.View>
+
+      {/* Layer 3.5 — Wordmark (visible during phase 2) */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.wordmarkHeader,
+          {
+            opacity: badgeAnim,
+            transform: [{ translateY: badgeSlide }],
+            top: insets.top + spacing.lg,
+          },
+        ]}
+      >
+        <Text style={styles.wordmarkHeaderNety}>nety</Text>
+        <Text style={styles.wordmarkHeaderFly}>fly</Text>
       </Animated.View>
 
       {/* Layer 4 — Content (visible during phase 2) */}
@@ -317,22 +333,22 @@ export const OnboardingScreen = ({ navigation, route }: Props) => {
             activeOpacity={0.85}
             onPress={() => {
               AsyncStorage.setItem('netyfly_onboarding_seen', 'true');
-              navigateTo('MainTabs');
+              navigationRef.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
             }}
-            style={styles.primaryButton}
+            style={[styles.primaryButton, styles.commencerButton]}
           >
-            <Text style={styles.primaryButtonText}>Commencer</Text>
-            <Ionicons name="arrow-forward" size={sizes.icon.md} color={colors.white} />
+            <Ionicons name="arrow-forward" size={sizes.icon.sm} color={colors.white} />
+            <Text style={styles.commencerButtonText}>Commencer</Text>
           </TouchableOpacity>
 
           {/* Reseller Access */}
           <TouchableOpacity
-            activeOpacity={0.85}
+            activeOpacity={0.75}
             onPress={() => navigation.navigate('ResellerLogin')}
-            style={styles.secondaryButton}
+            style={[styles.miniButton, styles.resellerButton]}
           >
-            <Ionicons name="briefcase-outline" size={sizes.icon.md} color={colors.white} />
-            <Text style={styles.secondaryButtonText}>Accès Revendeur</Text>
+            <Ionicons name="briefcase-outline" size={sizes.icon.sm} color={colors.white} />
+            <Text style={styles.resellerButtonText}>Accès Revendeur</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -363,18 +379,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary.DEFAULT,
   },
   logoContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
   planeWrapper: {
     position: 'absolute',
     left: '50%',
-    marginLeft: -60,
+    marginLeft: -spacing.xxxxxl + spacing.xs,
     zIndex: 10,
   },
   planeIcon: {
@@ -385,39 +397,52 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   wordmarkNety: {
-    fontSize: 52,
-    fontWeight: '800',
+    ...typography.authWordmark,
     color: colors.white,
-    letterSpacing: -1,
   },
   wordmarkFly: {
-    fontSize: 52,
-    fontWeight: '800',
+    ...typography.authWordmark,
     color: colors.secondary.DEFAULT,
-    letterSpacing: -1,
   },
   tagline: {
     ...typography.bodySM,
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 2,
+    color: colors.state.onPrimaryOverlay60,
+    letterSpacing: typography.overline.letterSpacing,
     textTransform: 'uppercase',
     marginTop: spacing.md,
   },
+  wordmarkHeader: {
+    position: 'absolute',
+    left: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    zIndex: 5,
+  },
+  wordmarkHeaderNety: {
+    ...typography.titleLG,
+    color: colors.white,
+    fontWeight: '800',
+  },
+  wordmarkHeaderFly: {
+    ...typography.titleLG,
+    color: colors.secondary.DEFAULT,
+    fontWeight: '800',
+  },
   content: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: spacing[0],
+    left: spacing[0],
+    right: spacing[0],
     paddingHorizontal: spacing.xl,
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: colors.state.onPrimaryOverlay15,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: colors.state.onPrimaryOverlay15,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     marginBottom: spacing.lg,
@@ -428,10 +453,8 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   headline: {
-    fontSize: 36,
-    fontWeight: '800',
+    ...typography.authHeadline,
     color: colors.white,
-    lineHeight: 44,
     marginBottom: spacing.md,
   },
   headlineAccent: {
@@ -439,38 +462,51 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     ...typography.bodyLG,
-    color: 'rgba(255,255,255,0.85)',
+    color: colors.state.onPrimaryOverlay85,
     marginBottom: spacing.xxxl,
   },
   primaryButton: {
+    marginBottom: spacing.sm,
+  },
+  commencerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.primary.DEFAULT,
+    minHeight: 52,
     borderRadius: radii.lg,
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.sm,
+    backgroundColor: colors.primary.DEFAULT,
+    borderWidth: 1.5,
+    borderColor: colors.state.onPrimaryOverlay40,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     ...shadows.high,
   },
-  primaryButtonText: {
-    ...typography.button,
-    color: colors.white,
+  commencerButtonText: {
+    fontSize: 15,
     fontWeight: '700',
+    color: colors.white,
   },
-  secondaryButton: {
+  miniButton: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  resellerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    minHeight: 52,
     borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: spacing.lg,
+    backgroundColor: colors.state.onPrimaryOverlay20,
+    borderWidth: 1.5,
+    borderColor: colors.state.onPrimaryOverlay25,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  secondaryButtonText: {
-    ...typography.button,
+  resellerButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.white,
   },
   loginLink: {
@@ -479,12 +515,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   loginLinkText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
+    ...typography.bodyMD,
+    color: colors.state.onPrimaryOverlay70,
     textAlign: 'center',
   },
   loginLinkAccent: {
-    color: colors.primary.DEFAULT,
+    color: colors.secondary.DEFAULT,
     fontWeight: '700',
     textDecorationLine: 'underline',
   },

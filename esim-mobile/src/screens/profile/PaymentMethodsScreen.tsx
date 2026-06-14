@@ -11,7 +11,7 @@ export const PaymentMethodsScreen = ({ navigation }: Props) => {
   const methods = [
     {
       icon: 'card-outline' as const,
-      subtitle: 'Ajoutez et gerez vos cartes de paiement securisees.',
+      subtitle: 'Ajoutez et gérez vos cartes de paiement sécurisées.',
       title: 'Carte bancaire',
     },
     {

@@ -7,7 +7,7 @@ import { EsimPurchaseOrchestrator } from 'src/Orchestrators/EsimPurchaseOrchestr
 import { TransactionModule } from '../transaction/transaction.module';
 import { EsimQueueModule } from '../Queue/module/esim-queue.module';
 import { PaymentModule } from '../payment/payment.module';
-import { ProvisioningModule } from '../ProvisionningEvent/AuditLog.module';
+import { ProvisioningModule } from '../AuditLog/AuditLog.module';
 
 @Module({
   imports: [

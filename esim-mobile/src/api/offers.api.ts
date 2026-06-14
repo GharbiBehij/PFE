@@ -72,14 +72,16 @@ const toCountryCode = (country: string, input: unknown): string => {
   return country.trim().slice(0, 2).toUpperCase() || 'UN';
 };
 
+const UNLIMITED_SENTINEL = 999_999;
+
 const normalizeDataVolume = (value: unknown): string => {
   if (typeof value === 'string') {
     const normalized = value.trim().toUpperCase();
     if (normalized.includes('GB') || normalized.includes('MB')) {
       return normalized;
     }
-
     const numericFromString = asNumber(normalized, 0);
+    if (numericFromString >= UNLIMITED_SENTINEL) return 'Illimité';
     if (numericFromString >= 1024) {
       return `${(numericFromString / 1024).toFixed(numericFromString % 1024 === 0 ? 0 : 1)}GB`;
     }
@@ -87,10 +89,10 @@ const normalizeDataVolume = (value: unknown): string => {
   }
 
   const numeric = asNumber(value, 0);
+  if (numeric >= UNLIMITED_SENTINEL) return 'Illimité';
   if (numeric >= 1024) {
     return `${(numeric / 1024).toFixed(numeric % 1024 === 0 ? 0 : 1)}GB`;
   }
-
   return `${Math.round(numeric)}MB`;
 };
 
@@ -120,11 +122,12 @@ const normalizeOffer = (rawValue: unknown): Offer => {
 
   return {
     id: asNumber(raw.id),
+    title: asString(raw.title),
     country,
     countryCode,
     dataVolume: normalizeDataVolume(raw.dataVolume),
     validityDays: asNumber(raw.validityDays),
-    price: asNumber(raw.price),
+    price: asNumber(raw.price) / 1000,
     currency: asString(raw.currency, 'TND') || 'TND',
     providerId: asString(raw.providerId),
     description: asString(raw.description) || undefined,
@@ -137,7 +140,7 @@ const normalizeDestination = (rawValue: unknown): Destination => {
   const raw = asRecord(rawValue);
   const country = asString(raw.country);
   const Region = asString(raw.Region || raw.region);
-  const startingPrice = asNumber(raw.startingPrice ?? raw.lowestPrice ?? raw.price);
+  const startingPrice = asNumber(raw.startingPrice ?? raw.lowestPrice ?? raw.price) / 1000;
 
   return {
     id: asString(raw.id, `${country}-${Region}`),

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { colors,shadows, radii, sizes, spacing, typography } from '../theme';
+import { colors, shadows, radii, sizes, spacing, typography } from '../theme';
 
 type PaymentMethodTileProps = {
   label: string;
@@ -43,37 +43,33 @@ export const PaymentMethodTile = ({ iconName, label, onPress, selected, subtitle
 };
 
 const styles = StyleSheet.create({
+  // Shared layout — padding, margin, radius, height are identical for both states
   tile: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     borderRadius: radii.card,
-    borderWidth: 2,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
     minHeight: sizes.tile.paymentMethodMinHeight,
   },
   unselectedTile: {
     backgroundColor: colors.surfaceCard,
     borderColor: colors.border,
-    borderRadius: radii.card,
     borderWidth: 1,
-    marginBottom: spacing.md,
-    minHeight: sizes.card.minHeight,
-    padding: spacing.lg,
     ...shadows.medium,
-
-},
+  },
   selectedTile: {
     borderColor: colors.primary.DEFAULT,
+    borderWidth: 2,
     backgroundColor: colors.white,
   },
   iconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.md,
-    height: 40,
-    width: 40,
+    height: sizes.tile.paymentMethodIcon,
+    width: sizes.tile.paymentMethodIcon,
     marginRight: spacing.md,
   },
   unselectedIconWrap: {

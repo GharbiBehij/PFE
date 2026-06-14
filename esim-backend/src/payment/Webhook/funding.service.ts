@@ -79,11 +79,18 @@ export class FundingService {
     salesmanId: number,
   ): Promise<FundingResult> {
     try {
+      // Cash payment — no wallet reservation needed
+      // Reseller collects cash physically
+      // Just mark as FUNDED directly
+      if (dto.paymentMethod === 'CASH') {
+        return { transactionId, status: 'FUNDED' };
+      }
+      // Wallet payment — reserve funds
       await this.walletService.ReserveAmount(
         salesmanId,
         transactionId,
         dto.amount,
-        dto.paymentMethod ?? 'WALLET',
+        'WALLET',
       );
       return { transactionId, status: 'FUNDED' };
     } catch (error) {

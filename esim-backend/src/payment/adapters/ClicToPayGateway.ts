@@ -9,37 +9,18 @@ import {
   PaymentStatusResult,
 } from '../interfaces/payment-gateway.interface';
 
-
-
 @Injectable()
 export class ClicToPayGateway implements PaymentGatewayAdapter {
   private readonly logger = new Logger(ClicToPayGateway.name);
+  private readonly baseUrl: string;
   private readonly httpsAgent = new https.Agent({
     rejectUnauthorized: false,
   });
   constructor(
     private readonly config: ConfigService,
     private readonly httpService: HttpService,
-  ) {}
-
-  private get baseUrl(): string {
-    const configuredBaseUrl = this.config.get<string>(
-      'CLICTOPAY_BASE_URL',
-      'https://test.clictopay.com/payment/rest',
-    );
-
-    const normalizedBaseUrl = configuredBaseUrl
-      .replace(/\/+$/, '')
-      .replace(/\/register\.do$/i, '')
-      .replace(/\/getOrderStatus\.do$/i, '');
-
-    if (configuredBaseUrl !== normalizedBaseUrl) {
-      this.logger.warn(
-        `CLICTOPAY_BASE_URL included endpoint or trailing slash. Normalized to: ${normalizedBaseUrl}`,
-      );
-    }
-
-    return normalizedBaseUrl;
+  ) {
+    this.baseUrl = this.config.get<string>('CLICTOPAY_BASE_URL') ?? 'https://test.clictopay.com/payment/rest';
   }
 
   private get credentials() {
@@ -78,7 +59,7 @@ export class ClicToPayGateway implements PaymentGatewayAdapter {
   }
 
   async createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
-    const url = `${this.baseUrl}/register.do`;
+    const url = `${this.baseUrl}/payment/rest/register.do`;
     const returnUrl = this.toHttpUrl(
       this.config.get<string>('CLICTOPAY_SUCCESS_URL'),
       '/payment/success',
@@ -93,7 +74,7 @@ export class ClicToPayGateway implements PaymentGatewayAdapter {
       userName: this.credentials.userName,
       password: this.credentials.password,
       orderNumber: String(input.transactionId),
-      amount: Math.round(input.amount * 1000),
+      amount: Math.round(input.amount),
       currency: 788,
       returnUrl,
       failUrl,
@@ -115,15 +96,11 @@ export class ClicToPayGateway implements PaymentGatewayAdapter {
       },
     });
 
-    const { data } = await this.httpService.axiosRef.post(
-      url,
-      null,
-      {
-        params,
-        headers,
-        httpsAgent:this.httpsAgent,
-      },
-    );
+    const { data } = await this.httpService.axiosRef.post(url, null, {
+      params,
+      headers,
+      httpsAgent: this.httpsAgent,
+    });
 
     if (data.errorCode && data.errorCode !== '0') {
       this.logger.error(
@@ -142,8 +119,12 @@ export class ClicToPayGateway implements PaymentGatewayAdapter {
   async fetchPaymentStatus(
     gatewayPaymentId: string,
   ): Promise<PaymentStatusResult> {
+    if (gatewayPaymentId.startsWith('mock-')) {
+      return { status: 'SUCCESS' };
+    }
+
     const { data } = await this.httpService.axiosRef.post(
-      `${this.baseUrl}/getOrderStatus.do`,
+      `${this.baseUrl}/payment/rest/getOrderStatus.do`,
       null,
       {
         params: {
@@ -152,11 +133,14 @@ export class ClicToPayGateway implements PaymentGatewayAdapter {
           orderId: gatewayPaymentId,
           language: 'fr',
         },
-         httpsAgent: this.httpsAgent,
+        httpsAgent: this.httpsAgent,
       },
     );
 
-    switch (data.orderStatus) {
+    // ClicToPay returns OrderStatus (capital O) per ClicToPayOrderStatus interface.
+    // data.orderStatus (lowercase) would always be undefined → always 'PENDING'.
+    const orderStatus: number = data.OrderStatus ?? data.orderStatus;
+    switch (orderStatus) {
       case 2:
         return { status: 'SUCCESS' };
       case 1:

@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../hooks/client/useAuth';
-import { colors, radii, sizes, spacing, typography } from '../../theme';
+import { colors, sizes, spacing, typography } from '../../theme';
+import { PurpleButton } from '../../components/Buttons';
 
 export const WebOnlyScreen = () => {
   const { logout } = useAuth();
@@ -20,7 +21,7 @@ export const WebOnlyScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Ionicons color={colors.text.tertiary} name="laptop-outline" size={sizes.icon.xxl} />
+      <Ionicons color={colors.primary.DEFAULT} name="laptop-outline" size={sizes.icon.xxl} />
 
       <Text style={styles.title}>Accès Web Uniquement</Text>
 
@@ -29,16 +30,13 @@ export const WebOnlyScreen = () => {
         Veuillez vous connecter depuis votre navigateur.
       </Text>
 
-      <TouchableOpacity
-        accessibilityRole="button"
+      <PurpleButton
         disabled={isSubmitting}
-        onPress={() => {
-          void handleLogout();
-        }}
+        label={isSubmitting ? 'Déconnexion...' : 'Se déconnecter'}
+        loading={isSubmitting}
+        onPress={() => { void handleLogout(); }}
         style={styles.logoutButton}
-      >
-        <Text style={styles.logoutButtonText}>{isSubmitting ? 'Déconnexion...' : 'Se déconnecter'}</Text>
-      </TouchableOpacity>
+      />
     </View>
   );
 };
@@ -64,15 +62,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   logoutButton: {
-    backgroundColor: colors.primary.DEFAULT,
-    borderRadius: radii.lg,
     marginTop: spacing.xl,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-  },
-  logoutButtonText: {
-    ...typography.button,
-    color: colors.white,
-    fontWeight: '700',
   },
 });

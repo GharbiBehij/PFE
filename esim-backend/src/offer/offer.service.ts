@@ -31,7 +31,11 @@ export class OfferService {
   search(query: string) {
     return this.OfferRepository.search(query);
   }
-  findByFilters(filters: { country?: string; region?: string; coverageType?: string }) {
+  findByFilters(filters: {
+    country?: string;
+    region?: string;
+    coverageType?: string;
+  }) {
     return this.OfferRepository.findByFilters(filters);
   }
   findDestinations() {

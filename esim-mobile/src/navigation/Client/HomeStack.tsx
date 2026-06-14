@@ -10,6 +10,7 @@ import { ProcessingModal } from '../../screens/payment/ProcessingModal';
 import { EsimFailedScreen } from '../../screens/payment/EsimFailedScreen';
 import { EsimExpiredScreen } from '../../screens/payment/EsimExpiredScreen';
 import { EsimSuccessScreen } from '../../screens/esims/EsimSuccessScreen';
+import { SuccessScreen } from '../../screens/payment/SuccessScreen';
 import { colors } from '../../theme';
 import type { HomeStackParamList } from '../types';
 
@@ -25,13 +26,14 @@ export const HomeStack = () => {
       }}
     >
       <Stack.Screen component={HomeScreen} name="Home" options={{ headerShown: false }} />
-      <Stack.Screen component={SearchScreen} name="Search" options={{ title: 'Recherche' }} />
+      <Stack.Screen component={SearchScreen} name="Search" options={{ headerShown: false }} />
       <Stack.Screen component={DestinationsScreen} name="Destinations" options={{ title: 'Destinations' }} />
       <Stack.Screen component={PackageListingScreen} name="PackageListing" options={{ headerShown: false }} />
       <Stack.Screen component={PackageDetailScreen} name="PackageDetail" options={{ headerShown: false }} />
       <Stack.Screen component={PaymentScreen} name="Payment" options={{ headerShown: false }} />
       <Stack.Screen component={PaymentWebViewScreen} name="PaymentWebView" options={{ headerShown: false }} />
       <Stack.Screen component={ProcessingModal} name="ProcessingModal" options={{ headerShown: false }} />
+      <Stack.Screen component={SuccessScreen} name="PaymentSuccess" options={{ headerShown: false }} />
       <Stack.Screen component={EsimSuccessScreen} name="EsimSuccess" options={{ headerShown: false }} />
       <Stack.Screen component={EsimFailedScreen} name="EsimFailed" options={{ headerShown: false }} />
       <Stack.Screen component={EsimExpiredScreen} name="EsimExpired" options={{ headerShown: false }} />

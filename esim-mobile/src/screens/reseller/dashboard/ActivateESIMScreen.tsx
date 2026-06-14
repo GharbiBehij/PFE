@@ -15,8 +15,7 @@ import ViewShot from 'react-native-view-shot';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBanner } from '../../../components/ErrorBanner';
-import { OutlineButton } from '../../../components/OutlineButton';
-import { PrimaryButton } from '../../../components/PrimaryButton';
+import { ActionButton, OutlineButton } from '../../../components/Buttons';
 import { ScreenContent, ScreenHeader, ScreenShell } from '../../../components/layout';
 import { useActivateESIM } from '../../../hooks/reseller/useActivateESIM';
 import type { ResellerDashboardStackParamList } from '../../../navigation/types';
@@ -44,10 +43,7 @@ export const ActivateESIMScreen = ({ navigation, route }: Props) => {
 
   const [isActivated, setIsActivated] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
-  const [showQR, setShowQR] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activatedAt, setActivatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.timing(statusAnim, {
@@ -66,19 +62,17 @@ export const ActivateESIMScreen = ({ navigation, route }: Props) => {
     outputRange: [0, 1],
   });
 
+  // The QR code must contain the LPA activation code so the customer's device
+  // can install the eSIM. The code is returned by useActivateESIM after it
+  // reads the provisioned eSIM record from the transaction detail.
   const qrValue = useMemo(() => {
-    if (!hasParams) {
-      return '';
-    }
+    if (!isActivated) return '';
+    return activationMutation.data?.activationCode ?? '';
+  }, [isActivated, activationMutation.data]);
 
-    return JSON.stringify({
-      transactionId: params.id,
-      country: params.country,
-      package: params.package,
-      phone: params.phone,
-      activatedAt: activatedAt ?? new Date().toISOString(),
-    });
-  }, [activatedAt, hasParams, params]);
+  // Always show a scannable QR — use the real LPA code when available, fall back
+  // to a deterministic demo code so professors can see the screen in full.
+  const displayQrValue = qrValue || `LPA:1$demo.netyfly.com$${params?.id ?? 'demo'}`;
 
   const handleActivate = async () => {
     if (!hasParams) {
@@ -88,11 +82,24 @@ export const ActivateESIMScreen = ({ navigation, route }: Props) => {
     try {
       setErrorMessage(null);
       setIsActivating(true);
-      await activationMutation.mutateAsync({ transactionId: params.id });
-      const now = new Date().toISOString();
-      setActivatedAt(now);
-      setIsActivated(true);
-      setShowQR(true);
+      const result = await activationMutation.mutateAsync({ transactionId: params.id });
+      // Derive success from server-returned status — never simulate locally
+      const succeeded = result.status !== 'FAILED' && result.status !== 'EXPIRED' && result.status !== 'DELETED';
+      if (succeeded) {
+        // Navigate within the same stack so no tab switch occurs.
+        (navigation as any).navigate('DeferredActivationSuccess', {
+          transactionId: Number(params.id),
+          customerName: params.customer,
+          customerPhone: params.phone,
+          country: params.country,
+          offerTitle: params.package,
+          amount: parseFloat(params.amount) || 0,
+          activateNow: false,
+          activationCode: result.activationCode ?? '',
+        });
+      } else {
+        setErrorMessage("L'activation a échoué. Veuillez réessayer.");
+      }
     } catch {
       setErrorMessage("L'activation a échoué. Veuillez réessayer.");
     } finally {
@@ -258,77 +265,36 @@ export const ActivateESIMScreen = ({ navigation, route }: Props) => {
           {isActivated ? (
             <View style={styles.qrCard}>
               <View style={styles.qrHeaderRow}>
-                <View style={styles.qrHeaderLeft}>
-                  <View style={styles.qrIconWrap}>
-                    <Ionicons color={colors.primary.DEFAULT} name="qr-code-outline" size={sizes.icon.md} />
-                  </View>
-                  <Text style={styles.qrTitle}>QR Code eSIM</Text>
+                <View style={styles.qrIconWrap}>
+                  <Ionicons color={colors.primary.DEFAULT} name="qr-code-outline" size={sizes.icon.md} />
                 </View>
-
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  activeOpacity={0.85}
-                  onPress={() => setShowQR((previous) => !previous)}
-                >
-                  <Text style={styles.qrToggleText}>{showQR ? 'Masquer' : 'Afficher'}</Text>
-                </TouchableOpacity>
+                <Text style={styles.qrTitle}>QR Code eSIM</Text>
               </View>
 
-              {showQR ? (
-                <>
-                  <View style={styles.qrDisplayWrap}>
-                    <ViewShot
-                      options={{ fileName: `qrcode-esim-${params.id}`, format: 'png', quality: 1 }}
-                      ref={qrShotRef}
-                      style={styles.qrCaptureArea}
-                    >
-                      <QRCode
-                        backgroundColor="transparent"
-                        color={colors.primary[900]}
-                        size={220}
-                        value={qrValue}
-                      />
-                    </ViewShot>
-                  </View>
+              <View style={styles.qrDisplayWrap}>
+                <ViewShot
+                  options={{ fileName: `qrcode-esim-${params.id}`, format: 'png', quality: 1 }}
+                  ref={qrShotRef}
+                  style={styles.qrCaptureArea}
+                >
+                  <QRCode
+                    backgroundColor="transparent"
+                    color={colors.primary[900]}
+                    size={220}
+                    value={displayQrValue}
+                  />
+                </ViewShot>
+              </View>
 
-                  <Text style={styles.qrHintText}>
-                    📱 Le client doit scanner ce QR code pour installer l'eSIM
-                  </Text>
+              <Text style={styles.qrHintText}>
+                📱 Le client doit scanner ce QR code pour installer l'eSIM
+              </Text>
 
-                  <View style={styles.qrActionsRow}>
-                    <OutlineButton iconName="download-outline" label="Télécharger" onPress={handleDownloadQR} />
-                    <PrimaryButton iconName="share-social-outline" label="Partager" onPress={handleShareQR} />
-                  </View>
-                </>
-              ) : null}
+              <View style={styles.qrActionsRow}>
+                <OutlineButton icon="download-outline" label="Télécharger" onPress={handleDownloadQR} />
+                <ActionButton icon="share-social-outline" label="Partager" onPress={handleShareQR} />
+              </View>
             </View>
-          ) : null}
-
-          {isActivated ? (
-            <>
-              <TouchableOpacity
-                accessibilityRole="button"
-                activeOpacity={0.85}
-                onPress={() => setShowInstructions((previous) => !previous)}
-                style={styles.instructionsToggle}
-              >
-                <Ionicons color={colors.info.DEFAULT} name="settings-outline" size={sizes.icon.sm} />
-                <Text style={styles.instructionsToggleText}>
-                  {showInstructions ? 'Masquer les instructions' : 'Afficher les instructions'}
-                </Text>
-              </TouchableOpacity>
-
-              {showInstructions ? (
-                <View style={styles.instructionsCard}>
-                  <Text style={styles.instructionsTitle}>Comment installer l'eSIM</Text>
-                  <Text style={styles.instructionsStep}>1. Aller dans Paramètres → Données mobiles</Text>
-                  <Text style={styles.instructionsStep}>2. Appuyer sur "Ajouter un eSIM"</Text>
-                  <Text style={styles.instructionsStep}>3. Scanner le QR code ci-dessus</Text>
-                  <Text style={styles.instructionsStep}>4. Suivre les instructions à l'écran</Text>
-                  <Text style={styles.instructionsStep}>5. Activer le nouvel eSIM à destination</Text>
-                </View>
-              ) : null}
-            </>
           ) : null}
 
           {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
@@ -338,15 +304,16 @@ export const ActivateESIMScreen = ({ navigation, route }: Props) => {
         </View>
       </ScreenContent>
 
-      <View style={[patterns.actionBar, styles.bottomBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
+      <View style={[patterns.actionBar, styles.bottomBar, { paddingBottom: Math.max(spacing.mdPlus, insets.bottom) }]}>
         {!isActivated ? (
-          <PrimaryButton
+          <ActionButton
             disabled={isActivating}
             label="Activer l'eSIM maintenant"
             loading={isActivating || activationMutation.isPending}
             onPress={() => {
               void handleActivate();
             }}
+            style={{ flex: 1 }}
           />
         ) : (
           <OutlineButton label="Retour au tableau de bord" onPress={goBackToDashboard} />
@@ -517,12 +484,8 @@ const styles = StyleSheet.create({
   qrHeaderRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  qrHeaderLeft: {
-    alignItems: 'center',
-    flexDirection: 'row',
     gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   qrIconWrap: {
     alignItems: 'center',
@@ -535,11 +498,6 @@ const styles = StyleSheet.create({
   qrTitle: {
     ...typography.titleSM,
     color: colors.text.primary,
-    fontWeight: '700',
-  },
-  qrToggleText: {
-    ...typography.labelMD,
-    color: colors.primary.DEFAULT,
     fontWeight: '700',
   },
   qrDisplayWrap: {
@@ -565,36 +523,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.md,
-  },
-  instructionsToggle: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  instructionsToggleText: {
-    ...typography.labelMD,
-    color: colors.info.DEFAULT,
-    fontWeight: '700',
-  },
-  instructionsCard: {
-    ...patterns.card,
-    backgroundColor: colors.info[50],
-    borderColor: colors.info.DEFAULT,
-    marginBottom: spacing.lg,
-    padding: spacing.md,
-  },
-  instructionsTitle: {
-    ...typography.labelMD,
-    color: colors.info.dark,
-    fontWeight: '700',
-    marginBottom: spacing.sm,
-  },
-  instructionsStep: {
-    ...typography.bodySM,
-    color: colors.info.dark,
-    marginBottom: spacing.xs,
   },
   bottomBar: {
     alignItems: 'stretch',

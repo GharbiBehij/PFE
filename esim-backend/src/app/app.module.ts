@@ -9,7 +9,7 @@ import { EsimModule } from 'src/esim/esim.module';
 import { TransactionModule } from 'src/transaction/transaction.module';
 import { OfferModule } from 'src/offer/offer.module';
 import { PaymentModule } from 'src/payment/payment.module';
-import { ProvisioningModule } from 'src/ProvisionningEvent/AuditLog.module';
+import { ProvisioningModule } from 'src/AuditLog/AuditLog.module';
 import { EsimQueueModule } from 'src/Queue/module/esim-queue.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
@@ -24,6 +24,7 @@ import { WalletModule } from 'src/WalletTransaction/wallet.module';
 import { ESIM_QUEUE } from 'src/Queue/Queue/esim.queue';
 import { SupportModule } from '../support/support.module';
 import { NotificationModule } from '../notification/notification.module';
+import { GatewayModule } from '../gateway/gateway.module';
 
 @Module({
   imports: [
@@ -35,24 +36,16 @@ import { NotificationModule } from '../notification/notification.module';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const redisUrl = config.get<string>('REDIS_URL');
-        const connection = redisUrl
-          ? new Redis(redisUrl, {
-              maxRetriesPerRequest: null,
-              tls: {},
-            })
-          : new Redis({
-              host: config.get('REDIS_HOST', 'localhost'),
-              port: config.get<number>('REDIS_PORT', 6379),
-              maxRetriesPerRequest: null,
-            });
-
-        return {
-          connection,
-          defaultJobOptions: { attempts: 5, delay: 30000 },
-        };
-      },
+      useFactory: (config: ConfigService) => ({
+        connection: new Redis({
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: parseInt(config.get<string>('REDIS_PORT', '6379'), 10),
+          password: config.get<string>('REDIS_PASSWORD'),
+          tls: config.get<string>('REDIS_TLS') === 'true' ? {} : undefined,
+          maxRetriesPerRequest: null,
+        }),
+        defaultJobOptions: { attempts: 2 },
+      }),
     }),
 
     // ── Bull Board UI — visual queue inspector ───────────────────
@@ -78,6 +71,7 @@ import { NotificationModule } from '../notification/notification.module';
     SupportModule,
     PaymentModule,
     ProvisioningModule,
+    GatewayModule,
     EsimQueueModule,
   ],
   controllers: [AppController],

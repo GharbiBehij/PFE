@@ -8,25 +8,30 @@ import { CountryFlag } from '../../components/CountryFlag';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { PaymentMethodTile } from '../../components/PaymentMethodTile';
-import { PrimaryButton } from '../../components/Cards/PrimaryCard';
+import { ActionButton, OutlineButton } from '../../components/Buttons';
 import { Group, ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
 import { useAuth } from '../../hooks/client/useAuth';
 import { useOfferDetail } from '../../hooks/client/useOffers';
 import { usePurchase } from '../../hooks/client/usePayment';
+import { useTopupEsim } from '../../hooks/client/useTopupEsim';
 import type { HomeStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
 import type { PaymentMethod } from '../../types/payment';
+
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Payment'>;
 
 export const PaymentScreen = ({ navigation, route }: Props) => {
   const { packageId } = route.params;
+  const mode = route.params.mode ?? 'purchase';
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const offerQuery = useOfferDetail(packageId);
   const purchaseMutation = usePurchase();
+  const topupMutation = useTopupEsim();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
   const [paymentState, setPaymentState] = useState<'idle' | 'loading' | 'paid' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showAuthWall, setShowAuthWall] = useState(false);
 
   if (offerQuery.isLoading) {
@@ -83,10 +88,12 @@ export const PaymentScreen = ({ navigation, route }: Props) => {
   }
 
   const formatAmount = (value: number, currency: string) => {
+    if (currency === 'TND') {
+      return `${value.toFixed(3)} TND`;
+    }
     const suffixByCurrency: Record<string, string> = {
       EUR: '€',
       USD: '$',
-      TND: ' DT',
     };
     return `${value.toFixed(2)}${suffixByCurrency[currency] ?? ` ${currency}`}`;
   };
@@ -97,15 +104,23 @@ export const PaymentScreen = ({ navigation, route }: Props) => {
       return;
     }
 
-    if (paymentState !== 'idle') return;
+    if (paymentState === 'loading' || paymentState === 'paid') return;
 
     setPaymentState('loading');
+    setErrorMessage(null);
 
     try {
-      const result = await purchaseMutation.mutateAsync({
-        offerId: offer.id,
-        paymentMethod,
-      });
+      const result = mode === 'topup' && route.params.esimId
+        ? await topupMutation.mutateAsync({
+            esimId: route.params.esimId,
+            offerId: Number(route.params.offerId ?? offer.id),
+            paymentMethod: paymentMethod === 'wallet' ? 'WALLET' : 'CASH',
+          })
+        : await purchaseMutation.mutateAsync({
+            offerId: offer.id,
+            paymentMethod,
+          });
+        console.log(result)
 
       const hasFailed =
         result.status === 'FAILED' ||
@@ -115,31 +130,41 @@ export const PaymentScreen = ({ navigation, route }: Props) => {
 
       if (hasFailed) {
         setPaymentState('error');
+        setErrorMessage('Le paiement a échoué. Veuillez réessayer.');
         return;
       }
 
-      setPaymentState('paid');
-
       const flowChannel: 'B2C' | 'B2B2C' =
-        paymentMethod === 'wallet' ? 'B2B2C' : 'B2C';
+        result.channel ?? (paymentMethod === 'wallet' ? 'B2B2C' : 'B2C');
 
-      // ── REDIRECT flow — Stripe Checkout + Flouci + ClicToPay ──
-      // All B2C payments now use PaymentWebView regardless of gateway
-      if (flowChannel === 'B2C' && result.paymentUrl) {
+      // ── REDIRECT flow — ClicToPay via in-app WebView ──
+      if (flowChannel === 'B2C') {
+        if (!result.paymentUrl) {
+          setPaymentState('error');
+          setErrorMessage("Impossible d'ouvrir le paiement. Veuillez réessayer.");
+          return;
+        }
+        setPaymentState('paid');
         navigation.navigate('PaymentWebView', {
           paymentUrl: result.paymentUrl,
           transactionId: result.transactionId,
+          mode,
+          esimId: route.params.esimId,
         });
         return;
       }
 
       // ── B2B2C wallet flow ──────────────────────────────────────
+      setPaymentState('paid');
       navigation.navigate('ProcessingModal', {
         transactionId: result.transactionId,
         channel: 'B2B2C',
+        mode,
+        esimId: route.params.esimId,
       });
     } catch {
       setPaymentState('error');
+      setErrorMessage("Erreur lors de l'initiation du paiement.");
     }
   };
 
@@ -212,12 +237,7 @@ export const PaymentScreen = ({ navigation, route }: Props) => {
         </Section>
 
         <Section>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Méthode de paiement</Text>
-          </View>
-        </Section>
-
-        <Section>
+          <Text style={styles.sectionTitle}>Méthode de paiement</Text>
           <Group>
             <View style={styles.methodsWrap}>
               {availableMethods.map((method) => (
@@ -238,15 +258,21 @@ export const PaymentScreen = ({ navigation, route }: Props) => {
             </View>
 
             {paymentState === 'error' && (
-              <ErrorBanner message="Le paiement a échoué. Veuillez réessayer." />
+              <ErrorBanner message={errorMessage ?? 'Le paiement a échoué. Veuillez réessayer.'} />
             )}
           </Group>
         </Section>
       </ScreenContent>
 
       <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
-        <PrimaryButton
-          containerStyle={paymentState === 'paid' ? styles.buttonPaid : undefined}
+        <OutlineButton
+          label="Annuler"
+          onPress={() => navigation.goBack()}
+          disabled={buttonDisabled}
+          style={styles.footerBtn}
+        />
+        <ActionButton
+          style={styles.footerBtn}
           label={buttonLabel}
           loading={buttonLoading}
           disabled={buttonDisabled}
@@ -394,6 +420,7 @@ const styles = StyleSheet.create({
     ...typography.titleMD,
     color: colors.text.primary,
     fontWeight: '700',
+    marginBottom: spacing.md,
   },
   methodsWrap: {
     width: '100%',
@@ -410,7 +437,7 @@ const styles = StyleSheet.create({
     color: colors.text.tertiary,
     marginLeft: spacing.sm,
   },
-  buttonPaid: {
-    opacity: 0.5,
+  footerBtn: {
+    flex: 1,
   },
 });

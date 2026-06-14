@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useRef, useState } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -27,6 +28,7 @@ import {
   spacing,
   typography,
 } from '../../theme';
+import { PurpleButton } from '../../components/Buttons';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'HelpCenter'>;
 type ContactView = 'choice' | 'email' | 'success';
@@ -78,8 +80,9 @@ const SUPPORT_EMAIL = 'support@netyfly.tn';
 export const HelpCenterScreen = ({ navigation }: Props) => {
   const { user } = useAuth();
   const contactMutation = useContactSupport();
+  const tabBarHeight = useBottomTabBarHeight();
 
-  const [openFaqId, setOpenFaqId] = useState<string>('1'); // first open by default
+  const [openFaqId, setOpenFaqId] = useState<string>('0'); // first open by default
   const [contactView, setContactView] = useState<ContactView>('choice');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -125,11 +128,11 @@ export const HelpCenterScreen = ({ navigation }: Props) => {
     switch (contactView) {
       case 'choice':
         return (
-          <View style={styles.contactCard}>
-            {/* WhatsApp row */}
+          <View style={styles.contactChoiceList}>
+            {/* WhatsApp card */}
             <Pressable
               onPress={handleOpenWhatsApp}
-              style={({ pressed }) => [styles.contactRow, pressed && styles.contactRowPressed]}
+              style={({ pressed }) => [styles.contactCard, styles.contactRow, pressed && styles.contactRowPressed]}
             >
               <View style={[styles.contactIconWrap, styles.contactIconWa]}>
                 <Ionicons name="logo-whatsapp" size={sizes.icon.md} color="#fff" />
@@ -147,12 +150,10 @@ export const HelpCenterScreen = ({ navigation }: Props) => {
               <Ionicons name="chevron-forward" size={sizes.icon.sm} color={colors.text.tertiary} />
             </Pressable>
 
-            <View style={styles.contactDivider} />
-
-            {/* Email row */}
+            {/* Email card */}
             <Pressable
               onPress={() => switchContactView('email')}
-              style={({ pressed }) => [styles.contactRow, pressed && styles.contactRowPressed]}
+              style={({ pressed }) => [styles.contactCard, styles.contactRow, pressed && styles.contactRowPressed]}
             >
               <View style={[styles.contactIconWrap, styles.contactIconEmail]}>
                 <Ionicons name="mail-outline" size={sizes.icon.md} color="#fff" />
@@ -217,20 +218,14 @@ export const HelpCenterScreen = ({ navigation }: Props) => {
               />
             </View>
 
-            <Pressable
+            <PurpleButton
               disabled={contactMutation.isPending}
+              icon="send-outline"
+              label={contactMutation.isPending ? 'Envoi en cours…' : 'Envoyer'}
+              loading={contactMutation.isPending}
               onPress={handleSendEmail}
-              style={({ pressed }) => [
-                styles.sendButton,
-                pressed && styles.sendButtonPressed,
-                contactMutation.isPending && styles.sendButtonDisabled,
-              ]}
-            >
-              <Ionicons name="send-outline" size={18} color={colors.white} />
-              <Text style={styles.sendButtonText}>
-                {contactMutation.isPending ? 'Envoi en cours…' : 'Envoyer'}
-              </Text>
-            </Pressable>
+              style={styles.sendButton}
+            />
           </View>
         );
 
@@ -271,7 +266,7 @@ export const HelpCenterScreen = ({ navigation }: Props) => {
       </ScreenHeader>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + spacing.xxxl }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -302,11 +297,11 @@ export const HelpCenterScreen = ({ navigation }: Props) => {
         {/* ── FAQ ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Questions fréquentes</Text>
-          <View style={styles.faqCard}>
-            {FAQ_ITEMS.map((item, index) => {
+          <View style={styles.faqList}>
+            {FAQ_ITEMS.map((item) => {
               const isOpen = openFaqId === item.id;
               return (
-                <View key={item.id} style={index > 0 ? styles.faqItemBorder : undefined}>
+                <View key={item.id} style={styles.faqCard}>
                   <Pressable
                     onPress={() => setOpenFaqId(isOpen ? '' : item.id)}
                     style={({ pressed }) => [styles.faqRow, pressed && { opacity: 0.75 }]}
@@ -357,6 +352,7 @@ const styles = StyleSheet.create({
   },
   headerBackBtn: {
     alignItems: 'center',
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radii.full,
     borderWidth: 1,
@@ -379,7 +375,7 @@ const styles = StyleSheet.create({
 
   /* ── SCROLL ── */
   scrollContent: {
-    paddingBottom: spacing.xxxl,
+    paddingTop: spacing.xs,
   },
 
   /* ── HERO ── */
@@ -454,17 +450,15 @@ const styles = StyleSheet.create({
   },
 
   /* ── FAQ ── */
-  faqCard: {
-    backgroundColor: colors.surfaceCard,
-    borderColor: colors.border,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    overflow: 'hidden',
-    ...shadows.medium,
+  faqList: {
+    gap: spacing.sm,
   },
-  faqItemBorder: {
-    borderTopColor: colors.borderSubtle,
-    borderTopWidth: 1,
+  faqCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.xxl,
+    borderWidth: 1,
+    ...shadows.medium,
   },
   faqRow: {
     alignItems: 'center',
@@ -484,10 +478,9 @@ const styles = StyleSheet.create({
     color: colors.primary.DEFAULT,
   },
   faqAnswer: {
-    backgroundColor: colors.primary[50],
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     padding: spacing.md,
   },
   faqAnswerText: {
@@ -497,12 +490,14 @@ const styles = StyleSheet.create({
   },
 
   /* ── CONTACT ── */
+  contactChoiceList: {
+    gap: spacing.sm,
+  },
   contactCard: {
     backgroundColor: colors.surfaceCard,
     borderColor: colors.border,
     borderRadius: radii.card,
     borderWidth: 1,
-    overflow: 'hidden',
     ...shadows.medium,
   },
   contactRow: {
@@ -570,12 +565,6 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: 2,
   },
-  contactDivider: {
-    backgroundColor: colors.borderSubtle,
-    height: 1,
-    marginLeft: spacing.lg + 40 + spacing.md, // indent past icon
-  },
-
   /* Email form */
   backLink: {
     alignItems: 'center',
@@ -657,27 +646,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   sendButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primary.DEFAULT,
-    borderRadius: radii.lg,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'center',
     margin: spacing.lg,
     marginTop: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  sendButtonPressed: {
-    backgroundColor: colors.primary.dark,
-    transform: [{ scale: 0.98 }],
-  },
-  sendButtonDisabled: {
-    opacity: 0.6,
-  },
-  sendButtonText: {
-    ...typography.labelMD,
-    color: colors.white,
-    fontWeight: '700',
   },
 
   /* Success */

@@ -1,18 +1,27 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenContent, ScreenHeader, ScreenShell } from '../../components/layout';
 import type { HomeStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
+import { ActionButton } from '../../components/Buttons';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'EsimFailed'>;
 
 export const EsimFailedScreen = ({ navigation, route }: Props) => {
   const { transactionId, reason } = route.params;
+  const insets = useSafeAreaInsets();
 
   const openHomeTab = () => {
-    navigation.getParent()?.navigate('HomeTab' as never);
+    (navigation.getParent() as any)?.navigate('HomeTab', { screen: 'Home' });
   };
+
+  const subtitle = reason
+    ? reason === 'payment_failed'
+      ? 'Le paiement a échoué.'
+      : reason
+    : "Nous n'avons pas pu activer votre eSIM.";
 
   return (
     <ScreenShell>
@@ -26,21 +35,19 @@ export const EsimFailedScreen = ({ navigation, route }: Props) => {
             <Ionicons color={colors.error.DEFAULT} name="close-circle" size={sizes.decoration.successIcon} />
           </View>
           <Text style={styles.title}>Une erreur est survenue</Text>
-          <Text style={styles.subtitle}>
-            {reason === 'payment_failed'
-              ? 'Le paiement a échoué.'
-              : "Nous n'avons pas pu activer votre eSIM."}
-          </Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
           <Text style={styles.transaction}>Transaction: {transactionId}</Text>
-
-          <Pressable
-            onPress={openHomeTab}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
-          >
-            <Text style={styles.primaryButtonText}>Retour à l'accueil</Text>
-          </Pressable>
         </View>
       </ScreenContent>
+
+      <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
+        <ActionButton
+          icon="home-outline"
+          label="Retour à l'accueil"
+          style={{ flex: 1 }}
+          onPress={openHomeTab}
+        />
+      </View>
     </ScreenShell>
   );
 };
@@ -87,16 +94,5 @@ const styles = StyleSheet.create({
     ...typography.bodySM,
     color: colors.text.tertiary,
     marginTop: spacing.xs,
-  },
-  primaryButton: {
-    ...patterns.ctaPrimary,
-    marginTop: spacing.xl,
-  },
-  primaryButtonPressed: {
-    ...patterns.ctaPrimaryPressed,
-  },
-  primaryButtonText: {
-    ...typography.labelMD,
-    color: colors.text.onPrimary,
   },
 });

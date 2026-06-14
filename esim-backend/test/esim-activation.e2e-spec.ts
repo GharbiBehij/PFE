@@ -34,7 +34,7 @@ import {
 } from '../src/esim/esim.service';
 import { TransactionService } from '../src/transaction/transaction.service';
 import { EsimRepository } from '../src/esim/esim.repository';
-import { AuditLogService } from '../src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from '../src/AuditLog/AuditLog.service';
 import { PROVIDER_ADAPTER } from '../src/esim/adapters/provider-adapter.token';
 import { EsimProducer } from '../src/Queue/Producer/esim.producer';
 import { TransactionRepository } from '../src/transaction/transaction.repository';
@@ -86,8 +86,7 @@ function makeEsim(
     activationCode: overrides.activationCode ?? 'ACT-CODE-001',
     activatedAt: overrides.activatedAt ?? null,
     expiryDate:
-      overrides.expiryDate ??
-      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      overrides.expiryDate ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -171,7 +170,8 @@ function buildMockProviderAdapter() {
 function buildMockConfigService() {
   return {
     get: jest.fn().mockImplementation((key: string, defaultValue?: number) => {
-      if (key === 'ESIM_MAX_ACTIVATION_ATTEMPTS') return MAX_ACTIVATION_ATTEMPTS;
+      if (key === 'ESIM_MAX_ACTIVATION_ATTEMPTS')
+        return MAX_ACTIVATION_ATTEMPTS;
       return defaultValue;
     }),
   };
@@ -204,9 +204,7 @@ function buildPrismaTx(
   updatedEsim?: ReturnType<typeof makeEsim>,
   findUniqueEsim?: ReturnType<typeof makeEsim>,
 ) {
-  const update = jest
-    .fn()
-    .mockResolvedValue(updatedEsim ?? lockedEsim ?? null);
+  const update = jest.fn().mockResolvedValue(updatedEsim ?? lockedEsim ?? null);
   const findUnique = jest
     .fn()
     .mockResolvedValue(findUniqueEsim ?? lockedEsim ?? null);
@@ -214,9 +212,7 @@ function buildPrismaTx(
   return {
     tx: {
       $executeRaw: jest.fn().mockResolvedValue(undefined),
-      $queryRaw: jest
-        .fn()
-        .mockResolvedValue(lockedEsim ? [lockedEsim] : []),
+      $queryRaw: jest.fn().mockResolvedValue(lockedEsim ? [lockedEsim] : []),
       esim: {
         update,
         findUnique,
@@ -447,7 +443,9 @@ describe('EsimService — happy path activation flow', () => {
       makeEsim({ status: EsimStatus.NOT_ACTIVE }),
       makeEsim({ status: EsimStatus.PENDING }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(phase1.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(phase1.tx),
+    );
 
     await esimService.requestActivation(1, makeActivationParams());
 
@@ -456,7 +454,9 @@ describe('EsimService — happy path activation flow', () => {
       makeEsim({ status: EsimStatus.PENDING }),
       makeEsim({ status: EsimStatus.PROCESSING }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(phase2.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(phase2.tx),
+    );
 
     await esimService.startProcessing(
       1,
@@ -468,7 +468,9 @@ describe('EsimService — happy path activation flow', () => {
       makeEsim({ status: EsimStatus.PROCESSING }),
       makeEsim({ status: EsimStatus.ACTIVE, activatedAt: new Date() }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(phase3.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(phase3.tx),
+    );
 
     const result = await esimService.markActivationSuccess(
       1,
@@ -557,7 +559,10 @@ describe('EsimService — provider timeout flow', () => {
         { provide: EsimRepository, useValue: buildMockEsimRepository() },
         { provide: AuditLogService, useValue: auditLog },
         { provide: PROVIDER_ADAPTER, useValue: buildMockProviderAdapter() },
-        { provide: TransactionRepository, useValue: buildMockTransactionRepository() },
+        {
+          provide: TransactionRepository,
+          useValue: buildMockTransactionRepository(),
+        },
         { provide: EsimProducer, useValue: buildMockEsimProducer() },
         {
           provide: OfferService,
@@ -705,7 +710,9 @@ describe('EsimService — provider timeout flow', () => {
 
     // Attempt 1 — timeout, non-final
     const attempt1 = buildPrismaTx(makeEsim({ status: EsimStatus.PROCESSING }));
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(attempt1.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(attempt1.tx),
+    );
     await esimService.markTimeout(esimId, {
       ...makeActivationParams({ attemptNumber: 1, isFinalAttempt: false }),
     });
@@ -716,7 +723,9 @@ describe('EsimService — provider timeout flow', () => {
 
     // Attempt 2 — timeout, non-final
     const attempt2 = buildPrismaTx(makeEsim({ status: EsimStatus.PROCESSING }));
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(attempt2.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(attempt2.tx),
+    );
     await esimService.markTimeout(esimId, {
       ...makeActivationParams({ attemptNumber: 2, isFinalAttempt: false }),
     });
@@ -730,7 +739,9 @@ describe('EsimService — provider timeout flow', () => {
       makeEsim({ status: EsimStatus.PROCESSING }),
       makeEsim({ status: EsimStatus.ACTIVE, activatedAt: new Date() }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(attempt3.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(attempt3.tx),
+    );
 
     const result = await esimService.markActivationSuccess(
       esimId,
@@ -765,7 +776,10 @@ describe('EsimService — idempotency', () => {
         { provide: EsimRepository, useValue: buildMockEsimRepository() },
         { provide: AuditLogService, useValue: auditLog },
         { provide: PROVIDER_ADAPTER, useValue: buildMockProviderAdapter() },
-        { provide: TransactionRepository, useValue: buildMockTransactionRepository() },
+        {
+          provide: TransactionRepository,
+          useValue: buildMockTransactionRepository(),
+        },
         { provide: EsimProducer, useValue: buildMockEsimProducer() },
         {
           provide: OfferService,
@@ -878,9 +892,7 @@ describe('EsimService — idempotency', () => {
       makeEsim({ status: EsimStatus.PENDING }),
       makeEsim({ status: EsimStatus.PROCESSING }),
     );
-    const second = buildPrismaTx(
-      makeEsim({ status: EsimStatus.PROCESSING }),
-    );
+    const second = buildPrismaTx(makeEsim({ status: EsimStatus.PROCESSING }));
 
     prisma.$transaction
       .mockImplementationOnce(async (cb: any) => cb(first.tx))
@@ -946,7 +958,10 @@ describe('EsimService — edge cases', () => {
         { provide: EsimRepository, useValue: buildMockEsimRepository() },
         { provide: AuditLogService, useValue: auditLog },
         { provide: PROVIDER_ADAPTER, useValue: buildMockProviderAdapter() },
-        { provide: TransactionRepository, useValue: buildMockTransactionRepository() },
+        {
+          provide: TransactionRepository,
+          useValue: buildMockTransactionRepository(),
+        },
         { provide: EsimProducer, useValue: buildMockEsimProducer() },
         {
           provide: OfferService,
@@ -1128,7 +1143,10 @@ describe('Full E2E — eSIM activation: request → processing → success', () 
         { provide: EsimRepository, useValue: buildMockEsimRepository() },
         { provide: AuditLogService, useValue: auditLog },
         { provide: PROVIDER_ADAPTER, useValue: buildMockProviderAdapter() },
-        { provide: TransactionRepository, useValue: buildMockTransactionRepository() },
+        {
+          provide: TransactionRepository,
+          useValue: buildMockTransactionRepository(),
+        },
         { provide: EsimProducer, useValue: buildMockEsimProducer() },
         {
           provide: OfferService,
@@ -1158,7 +1176,9 @@ describe('Full E2E — eSIM activation: request → processing → success', () 
       makeEsim({ status: EsimStatus.NOT_ACTIVE }),
       makeEsim({ status: EsimStatus.PENDING }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(phase1.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(phase1.tx),
+    );
 
     await esimService.requestActivation(esimId, makeActivationParams());
 
@@ -1178,7 +1198,9 @@ describe('Full E2E — eSIM activation: request → processing → success', () 
       makeEsim({ status: EsimStatus.PENDING }),
       makeEsim({ status: EsimStatus.PROCESSING }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(phase2.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(phase2.tx),
+    );
 
     await esimService.startProcessing(
       esimId,
@@ -1208,7 +1230,9 @@ describe('Full E2E — eSIM activation: request → processing → success', () 
       makeEsim({ status: EsimStatus.PROCESSING }),
       makeEsim({ status: EsimStatus.ACTIVE, activatedAt: new Date() }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(phase3.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(phase3.tx),
+    );
 
     const result = await esimService.markActivationSuccess(
       esimId,
@@ -1243,7 +1267,9 @@ describe('Full E2E — eSIM activation: request → processing → success', () 
     const attempt1 = buildPrismaTx(
       makeEsim({ id: 2, status: EsimStatus.PROCESSING }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(attempt1.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(attempt1.tx),
+    );
 
     await esimService.markTimeout(
       esimId,
@@ -1269,7 +1295,9 @@ describe('Full E2E — eSIM activation: request → processing → success', () 
     const attempt2 = buildPrismaTx(
       makeEsim({ id: 2, status: EsimStatus.PROCESSING }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(attempt2.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(attempt2.tx),
+    );
 
     await esimService.markTimeout(
       esimId,
@@ -1290,7 +1318,9 @@ describe('Full E2E — eSIM activation: request → processing → success', () 
       makeEsim({ id: 2, status: EsimStatus.PROCESSING }),
       makeEsim({ id: 2, status: EsimStatus.ACTIVE, activatedAt: new Date() }),
     );
-    prisma.$transaction.mockImplementationOnce(async (cb: any) => cb(attempt3.tx));
+    prisma.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb(attempt3.tx),
+    );
 
     const result = await esimService.markActivationSuccess(
       esimId,

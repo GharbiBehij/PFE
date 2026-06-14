@@ -2,7 +2,7 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from 'prisma/prisma.service';
-import { AuditLogService } from 'src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from 'src/AuditLog/AuditLog.service';
 import { TopUpOrchestrator } from 'src/Orchestrators/top-up.orchestrator';
 import { WalletWorkerService } from 'src/workers/wallet.service';
 import { TopUpWorkerService } from 'src/workers/top-up.service';
@@ -21,7 +21,7 @@ import {
   JOB_TOPUP_CREDIT,
 } from '../Queue/Queue/Wallet.queue';
 
-@Processor(WALLET_QUEUE, { concurrency: 5 })
+@Processor(WALLET_QUEUE, { concurrency: 2 })
 export class WalletProcessor extends WorkerHost {
   private readonly logger = new Logger(WalletProcessor.name);
 

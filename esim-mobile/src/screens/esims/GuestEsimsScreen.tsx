@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PurpleButton } from '../../components/Buttons/PurpleButton';
 import { ScreenContent, ScreenHeader, ScreenShell } from '../../components/layout';
 import { navigateTo } from '../../navigation/navigationRef';
-import { colors, radii, patterns, sizes, spacing, typography } from '../../theme';
-
+import { colors, radii, patterns, spacing, typography } from '../../theme';
+import { Pressable } from 'react-native';
 export const GuestEsimsScreen = () => {
   return (
     <ScreenShell>
@@ -38,26 +39,25 @@ export const GuestEsimsScreen = () => {
             et suivre votre consommation de données.
           </Text>
 
-          {/* Primary — login */}
-          <Pressable
-            onPress={() => navigateTo('Login', { source: 'app' })}
-            style={({ pressed }) => [styles.loginButton, pressed && styles.loginButtonPressed]}
-          >
-            <Text style={styles.loginButtonText}>Se connecter</Text>
-          </Pressable>
-
-          {/* Secondary — register */}
-          <Pressable
-            onPress={() => navigateTo('Register', { source: 'app' })}
-            style={styles.registerLink}
-          >
-            <Text style={styles.registerText}>
-              Pas encore de compte ?{' '}
-              <Text style={styles.registerAccent}>
-                Créer un compte
+          {/* CTA group — login + register */}
+          <View style={styles.cta}>
+            <PurpleButton
+              label="Se connecter"
+              icon="log-in-outline"
+              onPress={() => navigateTo('Login', { source: 'app' })}
+            />
+            <Pressable
+              onPress={() => navigateTo('Register', { source: 'app' })}
+              style={styles.registerLink}
+            >
+              <Text style={styles.registerText}>
+                Pas encore de compte ?{' '}
+                <Text style={styles.registerAccent}>
+                  Créer un compte
+                </Text>
               </Text>
-            </Text>
-          </Pressable>
+            </Pressable>
+          </View>
 
         </View>
       </ScreenContent>
@@ -116,26 +116,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 
-  // Login button — full width, purple
-  loginButton: {
-    ...patterns.ctaPrimary,
+  // CTA wrapper — boutons centrés pleine largeur
+  cta: {
     alignSelf: 'stretch',
-    backgroundColor: colors.primary.DEFAULT,
-  },
-  loginButtonPressed: {
-    ...patterns.ctaPrimaryPressed,
-    backgroundColor: colors.primary.dark,
-  },
-  loginButtonText: {
-    ...typography.labelLG,
-    color: colors.text.primary,
-    fontWeight: '700',
-    textAlign: 'center',
+    gap: spacing.md,
   },
 
   // Register — text link only, no border, no background
   registerLink: {
     paddingVertical: spacing.sm,
+    alignItems: 'center',
   },
   registerText: {
     ...typography.bodyMD,

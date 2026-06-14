@@ -85,11 +85,53 @@ export class EsimResponseDto {
   @ApiProperty({ example: '2026-04-09T08:30:00.000Z' })
   @Expose()
   createdAt: Date;
+
+  @ApiPropertyOptional({ required: false, nullable: true, example: 42 })
+  @Expose()
+  transactionId: number | null;
+
+  @ApiPropertyOptional({
+    required: false,
+    nullable: true,
+    example: 'LPA:1$smdp.io$ACT-2026-ABC',
+  })
+  @Expose()
+  activationCode: string | null;
+
+  @ApiPropertyOptional({ required: false, nullable: true, example: 'FR' })
+  @Expose()
+  @Transform(({ obj }) => obj.offer?.countryCode ?? null)
+  countryCode: string | null;
+
+  @ApiPropertyOptional({ required: false, nullable: true, example: 'MOCK1234567890' })
+  @Expose()
+  iccid: string | null;
+
+  @ApiPropertyOptional({ required: false, nullable: true })
+  @Expose()
+  @Transform(({ obj }) => {
+    if (!obj.offer) return null;
+    return {
+      id: obj.offer.id,
+      title: obj.offer.title,
+      country: obj.offer.country,
+      countryCode: obj.offer.countryCode,
+      dataVolume: obj.offer.dataVolume,
+      validityDays: obj.offer.validityDays,
+      price: obj.offer.price,
+      currency: 'TND',
+      networkType: obj.offer.networkType,
+    };
+  })
+  offer: Record<string, unknown> | null;
 }
 
 export class EsimListResponseDto {
   @ApiProperty({ type: [EsimResponseDto] })
   active: EsimResponseDto[];
+
+  @ApiProperty({ type: [EsimResponseDto] })
+  pending: EsimResponseDto[];
 
   @ApiProperty({ type: [EsimResponseDto] })
   expired: EsimResponseDto[];

@@ -84,14 +84,17 @@ Request:
 }
 ```
 
-Success response:
+Success response (B2C redirect):
 ```json
 {
   "transactionId": 42,
-  "status": "PENDING",
-  "message": "SUCCESS"
+  "status": "PENDING_PAYMENT",
+  "channel": "B2C",
+  "paymentUrl": "https://gateway.example.com/form"
 }
 ```
+
+Client action: open `paymentUrl` in a WebView and wait for the redirect back to the app.
 
 Failure response:
 ```json
@@ -107,6 +110,8 @@ Message values:
 - `SUCCESS`
 - `PAYMENT_FAILED`
 - `QUEUE_FAILED`
+
+Note: for B2C redirect responses, `paymentUrl` is the primary signal; `message` may be omitted.
 
 ## Transaction Contract
 

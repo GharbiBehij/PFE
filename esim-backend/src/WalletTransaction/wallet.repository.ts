@@ -193,12 +193,6 @@ export class WalletRepository {
   }
 
   // ── TOP-UP ─────────────────────────────────────────────────────────────────
-  async requestTopUp(salesmanId: number, amount: number) {
-    return this.prisma.topUpRequest.create({
-      data: { salesmanId, amount, status: 'PENDING', paymentMethod: 'TOP_UP' },
-    });
-  }
-
   async getPendingTopUps(page: number, limit: number) {
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([

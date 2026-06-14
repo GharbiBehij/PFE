@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { EsimService } from './esim.service';
 import { EsimRepository } from './esim.repository';
 import { TransactionRepository } from '../transaction/transaction.repository';
-import { AuditLogService } from '../ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from '../AuditLog/AuditLog.service';
 import { PROVIDER_ADAPTER } from './adapters/provider-adapter.token';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
@@ -92,12 +92,12 @@ describe('EsimService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EsimService,
-        { provide: EsimRepository,       useValue: mockEsimRepository },
+        { provide: EsimRepository, useValue: mockEsimRepository },
         { provide: TransactionRepository, useValue: mockTransactionRepository },
-        { provide: PROVIDER_ADAPTER,      useValue: mockProviderAdapter },
-        { provide: PrismaService,         useValue: mockPrismaService },      // ← added
-        { provide: AuditLogService,       useValue: mockAuditLogService },    // ← added
-        { provide: ConfigService,         useValue: mockConfigService },      // ← added
+        { provide: PROVIDER_ADAPTER, useValue: mockProviderAdapter },
+        { provide: PrismaService, useValue: mockPrismaService }, // ← added
+        { provide: AuditLogService, useValue: mockAuditLogService }, // ← added
+        { provide: ConfigService, useValue: mockConfigService }, // ← added
       ],
     }).compile();
 

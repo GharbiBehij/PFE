@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ActivityIndicator,
@@ -11,8 +12,6 @@ import {
 } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { ErrorBanner } from '../../../components/ErrorBanner';
-import { OutlineButton } from '../../../components/OutlineButton';
-import { PrimaryButton } from '../../../components/PrimaryButton';
 import { ScreenContent, ScreenHeader, ScreenShell } from '../../../components/layout';
 import { useDestinations, useOffersByCountry } from '../../../hooks/client/useOffers';
 import { usePurchase } from '../../../hooks/client/usePayment';
@@ -21,6 +20,7 @@ import type { ResellerSellStackParamList } from '../../../navigation/types';
 import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../../theme';
 import type { Destination, Offer } from '../../../types/offer';
 import { formatCurrency } from '../../../utils/formatCurrency';
+import { ActionButton, OutlineButton } from '../../../components/Buttons';
 
 type Props = NativeStackScreenProps<ResellerSellStackParamList, 'Sell'>;
 type Step = 1 | 2 | 3;
@@ -52,6 +52,22 @@ export const SellESIMScreen = ({ navigation }: Props) => {
   const [paymentMethod, setPaymentMethod] = useState<SellPaymentMethod>('wallet');
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
+  useFocusEffect(
+    useCallback(() => {
+      setCurrentStep(1);
+      setSearchQuery('');
+      setShowAutocomplete(false);
+      setSelectedCountryId(null);
+      setSelectedOfferId(null);
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerEmail('');
+      setActivateNow(true);
+      setPaymentMethod('wallet');
+      setPurchaseError(null);
+    }, []),
+  );
+
   const offersQuery = useOffersByCountry(selectedCountryId ?? '');
 
   const destinations = useMemo(() => destinationsQuery.data ?? [], [destinationsQuery.data]);
@@ -61,7 +77,11 @@ export const SellESIMScreen = ({ navigation }: Props) => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return [];
     return destinations
-      .filter((d) => d.country.toLowerCase().includes(query) || d.region.toLowerCase().includes(query))
+      .filter((d) => {
+        const country = (d.country ?? '').toLowerCase();
+        const region = (d.Region ?? '').toLowerCase();
+        return country.includes(query) || region.includes(query);
+      })
       .slice(0, 8);
   }, [destinations, searchQuery]);
 
@@ -133,23 +153,44 @@ export const SellESIMScreen = ({ navigation }: Props) => {
     }
   };
 
-  const handleConfirm = async () => {
-    if (!selectedOffer) return;
-    setPurchaseError(null);
-    try {
-      await purchaseMutation.mutateAsync({
-        offerId: selectedOffer.id,
-        paymentMethod,
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        customerEmail: customerEmail.trim() || undefined,
-        activateNow,
-      });
-      (navigation.getParent() as any)?.navigate('DashboardTab', { screen: 'Dashboard' });
-    } catch {
-      setPurchaseError('La transaction a echoue. Veuillez reessayer.');
+const handleConfirm = async () => {
+  if (!selectedOffer) return;
+  setPurchaseError(null);
+  try {
+    const result = await purchaseMutation.mutateAsync({
+      offerId: selectedOffer.id,
+      paymentMethod,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      customerEmail: customerEmail.trim() || undefined,
+      activateNow,
+    });
+
+    const hasFailed =
+      result.status === 'FAILED' ||
+      result.message === 'WALLET_FAILED' ||
+      result.message === 'PAYMENT_FAILED' ||
+      result.message === 'QUEUE_FAILED';
+
+    if (hasFailed) {
+      setPurchaseError('La transaction a échoué. Veuillez réessayer.');
+      return;
     }
-  };
+
+    navigation.navigate('B2BSellSuccess', {
+      transactionId: result.transactionId,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      country: selectedCountryId!,
+      offerTitle: selectedOffer.title,
+      amount: selectedOffer.price,
+      activateNow,
+    });
+
+  } catch {
+    setPurchaseError('La transaction a échoué. Veuillez réessayer.');
+  }
+};
 
   const handlePrimaryAction = async () => {
     if (currentStep === 1) {
@@ -186,7 +227,7 @@ export const SellESIMScreen = ({ navigation }: Props) => {
             onPress={handleBack}
             style={styles.iconButton}
           >
-            <Ionicons color={colors.primary.DEFAULT} name="arrow-back" size={sizes.icon.md} />
+            <Ionicons color={colors.text.onPrimary} name="arrow-back" size={sizes.icon.md} />
           </TouchableOpacity>
           <View style={styles.greetingBlock}>
             <Text style={styles.greetingSub}>Étape {currentStep} / {stepConfig.length}</Text>
@@ -262,7 +303,7 @@ export const SellESIMScreen = ({ navigation }: Props) => {
                 <View style={styles.autocompleteWrap}>
                   {filteredDestinations.map((destination) => (
                     <TouchableOpacity
-                      key={`${destination.country}-${destination.region}-${destination.id}`}
+                      key={`${destination.country}-${destination.Region}-${destination.id}`}
                       accessibilityRole="button"
                       activeOpacity={0.85}
                       onPress={() => handleSelectDestination(destination)}
@@ -270,12 +311,12 @@ export const SellESIMScreen = ({ navigation }: Props) => {
                     >
                       <View style={styles.autocompleteItemLeft}>
                         <Text style={styles.autocompleteCountry}>{destination.country}</Text>
-                        <Text style={styles.autocompleteRegion}>{destination.region}</Text>
+                        <Text style={styles.autocompleteRegion}>{destination.Region}</Text>
                       </View>
                       <Ionicons
                         color={colors.text.tertiary}
                         name="chevron-forward"
-                        size={sizes.icon.sm}
+                        size={sizes.icon.xs}
                       />
                     </TouchableOpacity>
                   ))}
@@ -357,7 +398,7 @@ export const SellESIMScreen = ({ navigation }: Props) => {
                 <View style={styles.inputWrap}>
                   <TextInput
                     onChangeText={setCustomerName}
-                    placeholder="Nom et prenom"
+                    placeholder="Nom et prénom"
                     placeholderTextColor={colors.text.tertiary}
                     style={styles.inputText}
                     value={customerName}
@@ -366,7 +407,7 @@ export const SellESIMScreen = ({ navigation }: Props) => {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Numero de telephone *</Text>
+                <Text style={styles.fieldLabel}>Numéro de téléphone *</Text>
                 <View style={styles.inputWrap}>
                   <TextInput
                     keyboardType="phone-pad"
@@ -413,7 +454,7 @@ export const SellESIMScreen = ({ navigation }: Props) => {
               <PackageSummaryCard offer={selectedOffer} selectedDestination={selectedDestination} />
 
               <View style={styles.orderCard}>
-                <Text style={styles.cardTitle}>Resume de commande</Text>
+                <Text style={styles.cardTitle}>Résumé de commande</Text>
                 <OrderRow
                   label="Destination"
                   value={selectedDestination?.country || selectedOffer?.country || '-'}
@@ -427,7 +468,7 @@ export const SellESIMScreen = ({ navigation }: Props) => {
                   }
                 />
                 <OrderRow label="Client" value={customerName.trim() || '-'} />
-                <OrderRow label="Telephone" value={customerPhone.trim() || '-'} />
+                <OrderRow label="Téléphone" value={customerPhone.trim() || '-'} />
                 <View style={styles.divider} />
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Total</Text>
@@ -480,9 +521,9 @@ export const SellESIMScreen = ({ navigation }: Props) => {
               <View style={styles.orderCard}>
                 <Text style={styles.cardTitle}>Options d'activation</Text>
                 <RadioOptionRow
-                  label="Activer immediatement"
+                  label="Activer immédiatement"
                   selected={activateNow}
-                  subtitle="Le client recoit la ligne activee des maintenant"
+                  subtitle="Le client reçoit la ligne activée dès maintenant"
                   onPress={() => setActivateNow(true)}
                 />
                 <RadioOptionRow
@@ -494,14 +535,14 @@ export const SellESIMScreen = ({ navigation }: Props) => {
               </View>
 
               <View style={styles.orderCard}>
-                <Text style={styles.cardTitle}>Methode de paiement</Text>
+                <Text style={styles.cardTitle}>Méthode de paiement</Text>
                 <RadioOptionRow
                   label="Payer depuis le portefeuille"
                   selected={paymentMethod === 'wallet'}
                   onPress={() => setPaymentMethod('wallet')}
                 />
                 <RadioOptionRow
-                  label="Paiement en especes"
+                  label="Paiement en espèces"
                   selected={paymentMethod === 'cash'}
                   onPress={() => setPaymentMethod('cash')}
                 />
@@ -533,11 +574,12 @@ export const SellESIMScreen = ({ navigation }: Props) => {
             label="Retour"
             onPress={handleBack}
           />
-          <PrimaryButton
+          <ActionButton
             disabled={isPrimaryDisabled}
             label={currentStep === 3 ? 'Valider' : 'Suivant'}
             loading={currentStep === 3 && purchaseMutation.isPending}
             onPress={() => { void handlePrimaryAction(); }}
+            style={{ flex: 1 }}
           />
         </View>
         {purchaseError ? <ErrorBanner message={purchaseError} /> : null}
@@ -617,6 +659,8 @@ const styles = StyleSheet.create({
   /* ── HEADER — mirrors HomeScreen ── */
   header: {
     ...patterns.headerShell,
+    backgroundColor: colors.primary.DEFAULT,
+    borderBottomColor: colors.primary.dark,
     borderBottomLeftRadius: radii.card,
     borderBottomRightRadius: radii.card,
   },
@@ -631,19 +675,19 @@ const styles = StyleSheet.create({
   },
   greetingSub: {
     ...typography.bodySM,
-    color: colors.text.secondary,
+    color: colors.state.onPrimaryOverlay80,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   headerTitle: {
     ...typography.titleLG,
-    color: colors.text.primary,
+    color: colors.text.onPrimary,
   },
   iconButton: {
     height: sizes.touch.sm,
     width: sizes.touch.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.primary[100],
+    backgroundColor: colors.state.onPrimaryOverlay18,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -669,29 +713,29 @@ const styles = StyleSheet.create({
   stepCircle: {
     alignItems: 'center',
     borderRadius: radii.full,
-    height: 32,
+    height: sizes.avatar.sm,
     justifyContent: 'center',
-    width: 32,
+    width: sizes.avatar.sm,
   },
   stepCircleActive: {
-    backgroundColor: colors.primary.DEFAULT,
+    backgroundColor: colors.white,
   },
   stepCircleDone: {
     backgroundColor: colors.success.DEFAULT,
   },
   stepCircleInactive: {
-    backgroundColor: colors.gray[200],
+    backgroundColor: colors.state.onPrimaryOverlay25,
   },
   stepCircleText: {
     ...typography.labelSM,
-    color: colors.text.tertiary,
+    color: colors.white,
     fontWeight: '700',
   },
   stepCircleTextActive: {
-    color: colors.text.onPrimary,
+    color: colors.primary.DEFAULT,
   },
   stepLine: {
-    backgroundColor: colors.gray[200],
+    backgroundColor: colors.state.onPrimaryOverlay25,
     flex: 1,
     height: 2,
     marginHorizontal: spacing.xs,
@@ -701,11 +745,11 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     ...typography.bodySM,
-    color: colors.text.tertiary,
+    color: colors.state.onPrimaryOverlay60,
     marginTop: spacing.xs,
   },
   stepLabelActive: {
-    color: colors.primary.DEFAULT,
+    color: colors.text.onPrimary,
     fontWeight: '700',
   },
   contentContainer: {
@@ -833,8 +877,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   summaryIconWrap: {
-    width: 36,
-    height: 36,
+    width: sizes.iconWrap.sm,
+    height: sizes.iconWrap.sm,
     borderRadius: radii.sm,
     backgroundColor: colors.primary[100],
     alignItems: 'center',
@@ -971,9 +1015,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.primary[100],
     borderRadius: radii.md,
-    height: 36,
+    height: sizes.iconWrap.sm,
     justifyContent: 'center',
-    width: 36,
+    width: sizes.iconWrap.sm,
     flexShrink: 0,
   },
   walletTitle: {
@@ -984,7 +1028,7 @@ const styles = StyleSheet.create({
     ...typography.titleSM,
     color: colors.text.primary,
     fontWeight: '800',
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
   walletRemainingWrap: {
     backgroundColor: colors.success[50],
@@ -1088,5 +1132,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
+    width: '100%',
   },
 });

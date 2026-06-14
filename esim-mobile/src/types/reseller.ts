@@ -12,6 +12,12 @@ export type DashboardStats = {
   todayCommission: number;
   weekCommission: number;
   monthCommission: number;
+  todaySalesRate: string;
+  thisWeekSalesRate: string;
+  monthSalesRate: string;
+  todayCommissionRate: string;
+  thisWeekCommissionRate: string;
+  monthCommissionRate: string;
 };
 
 export type RecentSale = {

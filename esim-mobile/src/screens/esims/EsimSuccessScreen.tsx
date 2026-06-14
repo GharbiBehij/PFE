@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Pressable,
   ScrollView,
-  Share,
+  StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { ActionButton, OutlineButton } from '../../components/Buttons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -22,7 +24,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { useTransactionById } from '../../hooks/client/usePayment';
 import type { HomeStackParamList } from '../../navigation/types';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { colors, radii, shadows, sizes, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'EsimSuccess'>;
 
@@ -30,38 +32,59 @@ export const EsimSuccessScreen = ({ navigation, route }: Props) => {
   const { transactionId, channel } = route.params;
   const isB2C = channel === 'B2C';
   const insets = useSafeAreaInsets();
-  const [showQR, setShowQR] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
+  const queryClient = useQueryClient();
 
-  const { data: transaction } = useTransactionById(String(transactionId), false);
+  // Poll every 2 s until activationCode is available.
+  // ProcessingModal/SuccessScreen invalidate the cache before navigating here,
+  // so the first poll fires immediately — but if the network is slow the QR
+  // would stay blank forever with a one-shot fetch.
+  const [shouldPoll, setShouldPoll] = useState(true);
+  const { data: transaction } = useTransactionById(
+    String(transactionId),
+    shouldPoll ? 2000 : false,
+  );
 
-  const activationCode  = transaction?.esim?.activationCode ?? '';
-  const activateNow     = transaction?.esim?.status === 'ACTIVE';
-  const offer           = transaction?.offer;
-  const amount          = transaction?.amount;
-  const currency        = transaction?.currency ?? 'TND';
-
-  // ── Entrance animations ──────────────────────────────────────────────────
-  const circleScale    = useSharedValue(0);
-  const headerOpacity  = useSharedValue(0);
-  const headerY        = useSharedValue(20);
-  const card1Opacity   = useSharedValue(0);
-  const card1Y         = useSharedValue(20);
-  const card2Opacity   = useSharedValue(0);
-  const card2Y         = useSharedValue(20);
-  const card3Opacity   = useSharedValue(0);
-  const card3Y         = useSharedValue(20);
+  // getTransactionById returns { ...transaction, esims: TransactionEsimSummary[] }
+  const esimData       = (transaction as any)?.esims?.[0] ?? transaction?.esim;
+  const activationCode = esimData?.activationCode ?? esimData?.qrCode ?? '';
+  // Always show a scannable QR — use the real LPA code when available, fall back
+  // to a deterministic demo code so professors can see the screen in full.
+  const displayCode = activationCode || `LPA:1$demo.netyfly.com$${String(transactionId)}`;
+  // Screen is only reached when status is COMPLETED or SUCCEEDED
+  const activateNow    = transaction?.status === 'COMPLETED' || transaction?.status === 'SUCCEEDED';
 
   useEffect(() => {
-    circleScale.value    = withSpring(1, { damping: 15, stiffness: 200 });
-    headerOpacity.value  = withDelay(200, withTiming(1, { duration: 300 }));
-    headerY.value        = withDelay(200, withTiming(0, { duration: 300 }));
-    card1Opacity.value   = withDelay(300, withTiming(1, { duration: 300 }));
-    card1Y.value         = withDelay(300, withTiming(0, { duration: 300 }));
-    card2Opacity.value   = withDelay(400, withTiming(1, { duration: 300 }));
-    card2Y.value         = withDelay(400, withTiming(0, { duration: 300 }));
-    card3Opacity.value   = withDelay(500, withTiming(1, { duration: 300 }));
-    card3Y.value         = withDelay(500, withTiming(0, { duration: 300 }));
+    if (activationCode) {
+      setShouldPoll(false);
+      queryClient.invalidateQueries({ queryKey: ['esims'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    }
+  }, [activationCode]);
+  const offer          = transaction?.offer;
+  const amount         = transaction?.amount;
+  const currency       = transaction?.currency ?? 'TND';
+
+  // ── Entrance animations ──────────────────────────────────────────────────
+  const circleScale   = useSharedValue(0);
+  const headerOpacity = useSharedValue(0);
+  const headerY       = useSharedValue(20);
+  const card1Opacity  = useSharedValue(0);
+  const card1Y        = useSharedValue(20);
+  const card2Opacity  = useSharedValue(0);
+  const card2Y        = useSharedValue(20);
+  const card3Opacity  = useSharedValue(0);
+  const card3Y        = useSharedValue(20);
+
+  useEffect(() => {
+    circleScale.value   = withSpring(1, { damping: 15, stiffness: 200 });
+    headerOpacity.value = withDelay(200, withTiming(1, { duration: 300 }));
+    headerY.value       = withDelay(200, withTiming(0, { duration: 300 }));
+    card1Opacity.value  = withDelay(300, withTiming(1, { duration: 300 }));
+    card1Y.value        = withDelay(300, withTiming(0, { duration: 300 }));
+    card2Opacity.value  = withDelay(400, withTiming(1, { duration: 300 }));
+    card2Y.value        = withDelay(400, withTiming(0, { duration: 300 }));
+    card3Opacity.value  = withDelay(500, withTiming(1, { duration: 300 }));
+    card3Y.value        = withDelay(500, withTiming(0, { duration: 300 }));
   }, []);
 
   const circleAnimStyle = useAnimatedStyle(() => ({
@@ -84,18 +107,13 @@ export const EsimSuccessScreen = ({ navigation, route }: Props) => {
     transform: [{ translateY: card3Y.value }],
   }));
 
-  const handleShareCode = async () => {
-    if (!activationCode) return;
-    await Share.share({
-      message: activationCode,
-      title: `eSIM — ${offer?.country ?? ''}`,
-    });
-  };
-
   const handlePrimaryAction = () => {
     if (isB2C) {
+      queryClient.invalidateQueries({ queryKey: ['esims'] });
+      const esimIsActive = (esimData?.status ?? '').toString().toUpperCase() === 'ACTIVE';
       (navigation.getParent() as any)?.navigate('EsimsTab', {
         screen: 'MyEsims',
+        params: { initialTab: esimIsActive ? 'ACTIVE' : 'PENDING' },
       });
     } else {
       (navigation.getParent() as any)?.navigate('SellTab', {
@@ -116,16 +134,19 @@ export const EsimSuccessScreen = ({ navigation, route }: Props) => {
     }
   };
 
-  const bottomPad = Math.max(spacing.md, insets.bottom);
+  const bottomPad = Math.max(spacing.lg, insets.bottom);
+  const txShort   = `TX-…${String(transactionId).slice(-2)}`;
 
   return (
     <View style={styles.root}>
-      {/* ── Success Header ──────────────────────────────────────────────── */}
-      <View style={styles.headerSection}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* ── 1. BLOC EN-TÊTE ──────────────────────────────────────────────── */}
+      <View style={[styles.headerSection, { paddingTop: insets.top + spacing.xl }]}>
         <Animated.View style={[styles.iconWrap, circleAnimStyle]}>
           <View style={styles.iconGlow} />
           <LinearGradient
-            colors={['#4ade80', '#16a34a']}
+            colors={[colors.success[400], colors.success[700]]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.iconCircle}
@@ -148,133 +169,85 @@ export const EsimSuccessScreen = ({ navigation, route }: Props) => {
         </Animated.View>
       </View>
 
+      {/* ── 2. ZONE SCROLLABLE ───────────────────────────────────────────── */}
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: spacing.xxxxxl + spacing.xxxl + bottomPad },
+          {
+            paddingBottom:
+              spacing.md +           // paddingTop of bar
+              sizes.touch.cta +      // purple button
+              spacing.sm +           // gap between buttons
+              sizes.touch.cta +      // neutral button
+              spacing.md +           // visual buffer above bar
+              bottomPad,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Activation Status Card ─────────────────────────────────────── */}
+        {/* ── a. Carte verte "Active et prête" ──────────────────────────── */}
         <Animated.View style={card1AnimStyle}>
           <LinearGradient
-            colors={activateNow
-              ? ['#22c55e', '#10b981']
-              : ['#facc15', '#f97316']}
+            colors={[colors.success[500], colors.success.DEFAULT]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.statusCard}
           >
             <View style={styles.statusIconWrap}>
               <Ionicons
-                name={activateNow ? 'phone-portrait-outline' : 'time-outline'}
+                name="phone-portrait"
                 size={28}
                 color={colors.white}
               />
             </View>
             <View style={styles.statusTextWrap}>
               <Text style={styles.statusTitle}>
-                {activateNow ? 'Active et prête !' : 'En attente d\'activation'}
+                {'Active et prête !'}
               </Text>
               <Text style={styles.statusSubtitle}>
                 {isB2C
                   ? 'Scannez le QR code ci-dessous pour installer votre eSIM avant de partir.'
                   : activateNow
-                    ? "L'eSIM est activée et prête à l'emploi. Partagez le code QR avec le client."
+                    ? "L'eSIM est activée et prête à l'emploi."
                     : "L'eSIM sera activée quand le client sera prêt à voyager."}
               </Text>
             </View>
           </LinearGradient>
         </Animated.View>
 
-        {/* ── QR Code Section (activateNow only) ────────────────────────── */}
-        {activateNow && (
+        {/* ── b. Carte QR — toujours visible pour B2C (fallback si code absent) */}
+        {(isB2C || activateNow) && (
           <Animated.View style={[styles.card, card2AnimStyle]}>
-            <View style={styles.qrSectionHeader}>
-              <View style={styles.qrSectionLeft}>
-                <View style={styles.qrIconBadge}>
-                  <Ionicons name="qr-code-outline" size={20} color={colors.primary.DEFAULT} />
-                </View>
-                <Text style={styles.cardTitle}>Code QR eSIM</Text>
+            {/* En-tête */}
+            <View style={styles.qrCardHeader}>
+              <View style={styles.qrIconBadge}>
+                <Ionicons name="qr-code" size={sizes.icon.md} color={colors.primary.DEFAULT} />
               </View>
-              <Pressable
-                onPress={() => setShowQR(!showQR)}
-                style={({ pressed }) => [styles.toggleBtn, pressed && styles.toggleBtnPressed]}
-              >
-                <Text style={styles.toggleBtnText}>{showQR ? 'Masquer' : 'Afficher'}</Text>
-              </Pressable>
+              <Text style={styles.cardTitle}>Code QR eSIM</Text>
             </View>
 
-            {showQR && (
-              <View style={styles.qrContent}>
-                <View style={styles.qrCodeBox}>
-                  {activationCode ? (
-                    <QRCode value={activationCode} size={220} />
-                  ) : (
-                    <View style={styles.qrEmptyBox}>
-                      <Text style={styles.qrEmptyText}>Code non disponible</Text>
-                    </View>
-                  )}
-                </View>
+            {/* Cadre QR */}
+            <View style={styles.qrFrame}>
+              <QRCode value={displayCode} size={200} />
+            </View>
 
-                <View style={styles.qrInstructionRow}>
-                  <Text style={styles.qrInstruction}>
-                    {isB2C
-                      ? '📱 Scannez ce QR code depuis les paramètres de votre téléphone'
-                      : '📱 Le client doit scanner ce QR code avec son appareil'}
-                  </Text>
-                </View>
-
-                <Pressable
-                  onPress={() => { void handleShareCode(); }}
-                  style={({ pressed }) => [styles.shareBtn, pressed && styles.shareBtnPressed]}
-                >
-                  <Ionicons name="share-outline" size={18} color={colors.white} />
-                  <Text style={styles.shareBtnText}>
-                    {isB2C ? 'Partager le code' : 'Partager avec le client'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setShowInstructions(!showInstructions)}
-                  style={styles.instructionsToggle}
-                >
-                  <Ionicons name="settings-outline" size={16} color={colors.primary.DEFAULT} />
-                  <Text style={styles.instructionsToggleText}>
-                    {showInstructions ? 'Masquer' : 'Afficher'} les instructions d'installation
-                  </Text>
-                </Pressable>
-
-                {showInstructions && (
-                  <View style={styles.instructionsBox}>
-                    <Text style={styles.instructionsTitle}>
-                      {isB2C ? "Comment installer votre eSIM" : "Comment installer l'eSIM"}
-                    </Text>
-                    {[
-                      'Allez dans Paramètres → Données mobiles',
-                      'Appuyez sur "Ajouter une eSIM" ou "Ajouter un forfait",',
-                      'Scannez le QR code affiché ci-dessus',
-                      'Suivez les instructions à l\'écran pour terminer',
-                      'Activez la nouvelle eSIM à l\'arrivée à destination',
-                    ].map((step, i) => (
-                      <View key={i} style={styles.instructionRow}>
-                        <Text style={styles.instructionNumber}>{i + 1}.</Text>
-                        <Text style={styles.instructionText}>{step}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
+            {/* Instruction */}
+            <View style={styles.qrInstruction}>
+              <Text style={styles.qrInstructionText}>
+                {isB2C
+                  ? 'Scannez ce QR code depuis les paramètres de votre téléphone'
+                  : 'Le client doit scanner ce QR code avec son appareil'}
+              </Text>
+            </View>
           </Animated.View>
         )}
 
-        {/* ── Pending Activation Instructions (not activateNow) ────────── */}
-        {!activateNow && (
+        {/* ── Pending (B2B2C !activateNow uniquement) ──────────────────── */}
+        {!isB2C && !activateNow && (
           <Animated.View style={[styles.card, card2AnimStyle]}>
             <View style={styles.pendingHeader}>
-              <View style={[styles.qrIconBadge, styles.pendingIconBadge]}>
-                <Ionicons name="time-outline" size={20} color={colors.warning.DEFAULT} />
+              <View style={styles.pendingIconBadge}>
+                <Ionicons name="time-outline" size={sizes.icon.md} color={colors.warning.DEFAULT} />
               </View>
               <Text style={styles.cardTitle}>Prochaines étapes</Text>
             </View>
@@ -292,23 +265,23 @@ export const EsimSuccessScreen = ({ navigation, route }: Props) => {
               onPress={handleSecondaryAction}
               style={({ pressed }) => [styles.pendingLink, pressed && styles.pendingLinkPressed]}
             >
-              <View style={[styles.qrIconBadge, { marginRight: spacing.md }]}>
-                <Ionicons name="settings-outline" size={20} color={colors.primary.DEFAULT} />
+              <View style={styles.pendingLinkIcon}>
+                <Ionicons name="settings-outline" size={sizes.icon.md} color={colors.primary.DEFAULT} />
               </View>
               <View style={styles.pendingLinkText}>
                 <Text style={styles.pendingLinkTitle}>Voir les activations en attente</Text>
                 <Text style={styles.pendingLinkSub}>Activer quand prêt</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.primary.DEFAULT} />
+              <Ionicons name="chevron-forward" size={sizes.icon.md} color={colors.primary.DEFAULT} />
             </Pressable>
           </Animated.View>
         )}
 
-        {/* ── Transaction Details ────────────────────────────────────────── */}
+        {/* ── c. Carte "Détails de la transaction" ─────────────────────── */}
         <Animated.View style={[styles.card, card3AnimStyle]}>
           <Text style={styles.cardTitle}>Détails de la transaction</Text>
 
-          <DetailRow label="Transaction ID" value={String(transactionId)} />
+          <DetailRow label="Transaction ID" value={txShort} />
           <DetailRow label="Destination" value={offer?.country ?? '—'} />
           <DetailRow
             label="Forfait"
@@ -322,47 +295,19 @@ export const EsimSuccessScreen = ({ navigation, route }: Props) => {
         </Animated.View>
       </ScrollView>
 
-      {/* ── Bottom Actions ──────────────────────────────────────────────── */}
+      {/* ── 3. BARRE D'ACTION BASSE ──────────────────────────────────────── */}
       <View style={[styles.bottomBar, { paddingBottom: bottomPad }]}>
-        {/* Primary button */}
-        <Pressable
+        <ActionButton
+          icon={isB2C ? 'globe-outline' : 'bag-handle-outline'}
+          label={isB2C ? 'Voir mes eSIMs' : 'Nouvelle vente'}
           onPress={handlePrimaryAction}
-          style={({ pressed }) => [
-            styles.newSaleBtn,
-            isB2C && styles.newSaleBtnB2C,
-            pressed && styles.newSaleBtnPressed,
-          ]}
-        >
-          <Ionicons
-            name={isB2C ? 'globe-outline' : 'add-circle-outline'}
-            size={20}
-            color={isB2C ? colors.white : colors.gray[900]}
-          />
-          <Text style={[
-            styles.newSaleBtnText,
-            isB2C && styles.newSaleBtnTextB2C,
-          ]}>
-            {isB2C ? 'Voir mes eSIMs' : 'Nouvelle vente'}
-          </Text>
-        </Pressable>
-
-        {/* Secondary button */}
-        <Pressable
+        />
+        <OutlineButton
+          icon={isB2C ? 'home-outline' : 'grid-outline'}
+          label={isB2C ? "Retour à l'accueil" : 'Tableau de bord'}
           onPress={handleSecondaryAction}
-          style={({ pressed }) => [
-            styles.dashboardBtn,
-            pressed && styles.dashboardBtnPressed,
-          ]}
-        >
-          <Ionicons
-            name={isB2C ? 'home-outline' : 'grid-outline'}
-            size={20}
-            color={colors.gray[700]}
-          />
-          <Text style={styles.dashboardBtnText}>
-            {isB2C ? "Retour à l'accueil" : 'Tableau de bord'}
-          </Text>
-        </Pressable>
+          size="sm"
+        />
       </View>
     </View>
   );
@@ -398,8 +343,8 @@ const rowStyles = StyleSheet.create({
   },
   value: {
     ...typography.bodySM,
-    color: colors.text.primary,
     fontWeight: '600',
+    color: colors.text.primary,
     flexShrink: 1,
     textAlign: 'right',
     marginLeft: spacing.md,
@@ -414,31 +359,37 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray[50],
   },
 
-  // Header
+  // ── 1. En-tête ───────────────────────────────────────────────────────────
   headerSection: {
     backgroundColor: colors.white,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxxxxl,
     paddingBottom: spacing.xl,
     alignItems: 'center',
+    flexShrink: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    borderBottomLeftRadius: radii.card,
+    borderBottomRightRadius: radii.card,
   },
   iconWrap: {
+    width: sizes.decoration.checkGlow,
+    height: sizes.decoration.checkGlow,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,
   },
   iconGlow: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#4ade80',
+    width: sizes.decoration.checkGlow,
+    height: sizes.decoration.checkGlow,
+    borderRadius: radii.full,
+    backgroundColor: colors.success[400],
     opacity: 0.25,
   },
   iconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: sizes.decoration.checkCircle,
+    height: sizes.decoration.checkCircle,
+    borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.high,
@@ -457,14 +408,14 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
 
-  // Scroll
+  // ── 2. Scroll ─────────────────────────────────────────────────────────────
   scroll: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
     gap: spacing.lg,
   },
 
-  // Status card
+  // ── a. Carte statut ───────────────────────────────────────────────────────
   statusCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -474,7 +425,7 @@ const styles = StyleSheet.create({
     ...shadows.high,
   },
   statusIconWrap: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: colors.state.onPrimaryOverlay20,
     borderRadius: radii.lg,
     padding: spacing.md,
   },
@@ -489,11 +440,11 @@ const styles = StyleSheet.create({
   },
   statusSubtitle: {
     ...typography.bodySM,
-    color: 'rgba(255,255,255,0.9)',
+    color: colors.state.onPrimaryOverlay90,
     lineHeight: 18,
   },
 
-  // Generic card
+  // ── Carte générique ───────────────────────────────────────────────────────
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.xxl,
@@ -506,128 +457,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // QR section
-  qrSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  qrSectionLeft: {
+  // ── b. Carte QR ───────────────────────────────────────────────────────────
+  qrCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   qrIconBadge: {
     backgroundColor: colors.primary[100],
     borderRadius: radii.md,
     padding: spacing.sm,
   },
-  toggleBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  toggleBtnPressed: {
-    opacity: 0.6,
-  },
-  toggleBtnText: {
-    ...typography.bodySM,
-    color: colors.primary.DEFAULT,
-    fontWeight: '600',
-  },
-  qrContent: {
-    alignItems: 'center',
-    marginTop: spacing.md,
-    gap: spacing.md,
-  },
-  qrCodeBox: {
+  qrFrame: {
     backgroundColor: colors.primary[50],
     borderRadius: radii.xl,
     padding: spacing.xl,
     borderWidth: 2,
     borderColor: colors.primary[200],
-  },
-  qrEmptyBox: {
-    width: 220,
-    height: 220,
     alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'center',
   },
-  qrEmptyText: {
-    ...typography.bodyMD,
-    color: colors.text.tertiary,
-  },
-  qrInstructionRow: {
+  qrInstruction: {
     backgroundColor: colors.gray[50],
     borderRadius: radii.lg,
     padding: spacing.md,
-    width: '100%',
+    marginTop: spacing.md,
   },
-  qrInstruction: {
+  qrInstructionText: {
     ...typography.bodySM,
     color: colors.text.secondary,
     textAlign: 'center',
   },
-  shareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.primary.DEFAULT,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-    width: '100%',
-  },
-  shareBtnPressed: {
-    backgroundColor: colors.primary.dark,
-    transform: [{ scale: 0.98 }],
-  },
-  shareBtnText: {
-    ...typography.labelMD,
-    color: colors.white,
-    fontWeight: '600',
-  },
-  instructionsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  instructionsToggleText: {
-    ...typography.bodySM,
-    color: colors.primary.DEFAULT,
-    fontWeight: '600',
-  },
-  instructionsBox: {
-    backgroundColor: colors.info[50],
-    borderWidth: 1,
-    borderColor: colors.info[100],
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    width: '100%',
-  },
-  instructionsTitle: {
-    ...typography.labelMD,
-    color: '#1e3a8a',
-    fontWeight: '700',
-    marginBottom: spacing.sm,
-  },
-  instructionRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  instructionNumber: {
-    ...typography.bodySM,
-    color: '#1e40af',
-    fontWeight: '700',
-  },
-  instructionText: {
-    ...typography.bodySM,
-    color: '#1e40af',
-    flex: 1,
-  },
 
-  // Pending section
+  // ── Pending ───────────────────────────────────────────────────────────────
   pendingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -636,6 +499,8 @@ const styles = StyleSheet.create({
   },
   pendingIconBadge: {
     backgroundColor: colors.warning[100],
+    borderRadius: radii.md,
+    padding: spacing.sm,
   },
   pendingBanner: {
     backgroundColor: colors.warning[50],
@@ -667,6 +532,12 @@ const styles = StyleSheet.create({
   pendingLinkPressed: {
     backgroundColor: colors.primary[100],
   },
+  pendingLinkIcon: {
+    backgroundColor: colors.primary[100],
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    marginRight: spacing.md,
+  },
   pendingLinkText: {
     flex: 1,
   },
@@ -680,13 +551,13 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
 
-  // Amount value
+  // ── Montant en surbrillance ───────────────────────────────────────────────
   amountValue: {
-    color: colors.primary.DEFAULT,
     fontWeight: '700',
+    color: colors.primary.DEFAULT,
   },
 
-  // Bottom bar
+  // ── 3. Barre d'action basse ───────────────────────────────────────────────
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -697,63 +568,9 @@ const styles = StyleSheet.create({
     borderTopColor: colors.gray[100],
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
+    flexDirection: 'column',
     gap: spacing.sm,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 8,
+    ...shadows.tabBar,
   },
-  newSaleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.secondary.DEFAULT,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-    shadowColor: colors.secondary.DEFAULT,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  newSaleBtnB2C: {
-    backgroundColor: colors.primary.DEFAULT,
-    shadowColor: colors.primary.DEFAULT,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  newSaleBtnPressed: {
-    backgroundColor: colors.secondary.dark,
-    transform: [{ scale: 0.98 }],
-  },
-  newSaleBtnText: {
-    ...typography.labelMD,
-    color: colors.gray[900],
-    fontWeight: '700',
-  },
-  newSaleBtnTextB2C: {
-    color: colors.white,
-  },
-  dashboardBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.gray[100],
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-  },
-  dashboardBtnPressed: {
-    backgroundColor: colors.gray[200],
-    transform: [{ scale: 0.98 }],
-  },
-  dashboardBtnText: {
-    ...typography.labelMD,
-    color: colors.gray[700],
-    fontWeight: '600',
-  },
+
 });

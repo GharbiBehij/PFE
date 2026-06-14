@@ -64,6 +64,7 @@
     "dotenv": "^17.4.2",
     "expo": "^55.0.23",
     "expo-notifications": "~55.0.22",
+    "expo-web-browser": "^56.0.5",
     "ioredis": "^5.10.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

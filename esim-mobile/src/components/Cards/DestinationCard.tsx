@@ -28,28 +28,38 @@ const getCoverageLabel = (coverageType: Destination['coverageType']): string => 
 
 const getCountryFlag = (country: string): string => {
   const flagMap: Record<string, string> = {
+    // ── Local countries ──────────────────────────────────────
+    Tunisia: '🇹🇳',
     France: '🇫🇷',
+    Germany: '🇩🇪',
     Spain: '🇪🇸',
     Italy: '🇮🇹',
-    Germany: '🇩🇪',
-    UK: '🇬🇧',
     'United Kingdom': '🇬🇧',
-    USA: '🇺🇸',
-    'United States': '🇺🇸',
-    Turkey: '🇹🇷',
+    UK: '🇬🇧',
+    Morocco: '🇲🇦',
+    Egypt: '🇪🇬',
+    'United Arab Emirates': '🇦🇪',
     UAE: '🇦🇪',
     Dubai: '🇦🇪',
+    'Saudi Arabia': '🇸🇦',
     Japan: '🇯🇵',
+    'South Korea': '🇰🇷',
+    Thailand: '🇹🇭',
+    'United States': '🇺🇸',
+    USA: '🇺🇸',
+    Canada: '🇨🇦',
+    Brazil: '🇧🇷',
+    Turkey: '🇹🇷',
+    Poland: '🇵🇱',
+    Netherlands: '🇳🇱',
+    Sweden: '🇸🇪',
+    Portugal: '🇵🇹',
+    Greece: '🇬🇷',
     China: '🇨🇳',
     Singapore: '🇸🇬',
-    Thailand: '🇹🇭',
-    Greece: '🇬🇷',
-    Portugal: '🇵🇹',
-    Netherlands: '🇳🇱',
     Belgium: '🇧🇪',
     Switzerland: '🇨🇭',
     Austria: '🇦🇹',
-    Poland: '🇵🇱',
     'Czech Republic': '🇨🇿',
     Hungary: '🇭🇺',
     Romania: '🇷🇴',
@@ -60,7 +70,12 @@ const getCountryFlag = (country: string): string => {
     'North Macedonia': '🇲🇰',
     Montenegro: '🇲🇪',
     Bosnia: '🇧🇦',
+    // ── Regional & global ────────────────────────────────────
     Europe: '🇪🇺',
+    'Middle East & Africa': '🌍',
+    'Asia Pacific': '🌏',
+    Americas: '🌎',
+    'North Africa': '🌍',
     Asia: '🌏',
     'Middle East': '🌍',
     'North America': '🌎',
@@ -72,53 +87,42 @@ const getCountryFlag = (country: string): string => {
   return flagMap[country] ?? '🌍';
 };
 
+// Maps non-standard regional codes to a representative country flag
+const REGIONAL_CODE_MAP: Record<string, string> = {
+  eu: 'eu', mea: 'ae', apac: 'jp', ame: 'us', naf: 'tn',
+};
+
 const getFlagUri = (countryCode: string, country: string): string | null => {
   const normalizedCode = countryCode?.trim().toLowerCase();
+
+  // Standard 2-letter ISO code → direct CDN lookup
   if (/^[a-z]{2}$/.test(normalizedCode)) {
     return `https://flagcdn.com/w80/${normalizedCode}.png`;
   }
 
-  const codeMap: Record<string, string> = {
-    France: 'fr',
-    Spain: 'es',
-    Italy: 'it',
-    Germany: 'de',
-    UK: 'gb',
-    'United Kingdom': 'gb',
-    USA: 'us',
-    'United States': 'us',
-    Turkey: 'tr',
-    UAE: 'ae',
-    Dubai: 'ae',
-    Japan: 'jp',
-    China: 'cn',
-    Singapore: 'sg',
-    Thailand: 'th',
-    Greece: 'gr',
-    Portugal: 'pt',
-    Netherlands: 'nl',
-    Belgium: 'be',
-    Switzerland: 'ch',
-    Austria: 'at',
-    Poland: 'pl',
-    'Czech Republic': 'cz',
-    Hungary: 'hu',
-    Romania: 'ro',
-    Bulgaria: 'bg',
-    Croatia: 'hr',
-    Serbia: 'rs',
-    Albania: 'al',
-    'North Macedonia': 'mk',
-    Montenegro: 'me',
-    Bosnia: 'ba',
-    Europe: 'eu',
-    Asia: 'jp',
-    'Middle East': 'ae',
-    'North America': 'us',
-    Oceania: 'au',
+  // Regional / non-ISO codes (EU, MEA, APAC, AME, NAF, GLOBAL)
+  const regionalCode = REGIONAL_CODE_MAP[normalizedCode];
+  if (regionalCode) {
+    return `https://flagcdn.com/w80/${regionalCode}.png`;
+  }
+
+  // Fallback: derive from country name
+  const nameCodeMap: Record<string, string> = {
+    Tunisia: 'tn', France: 'fr', Germany: 'de', Spain: 'es', Italy: 'it',
+    'United Kingdom': 'gb', UK: 'gb', Morocco: 'ma', Egypt: 'eg',
+    'United Arab Emirates': 'ae', UAE: 'ae', 'Saudi Arabia': 'sa',
+    Japan: 'jp', 'South Korea': 'kr', Thailand: 'th',
+    'United States': 'us', USA: 'us', Canada: 'ca', Brazil: 'br',
+    Turkey: 'tr', Poland: 'pl', Netherlands: 'nl', Sweden: 'se',
+    Portugal: 'pt', Greece: 'gr', China: 'cn', Singapore: 'sg',
+    Belgium: 'be', Switzerland: 'ch', Austria: 'at', Poland2: 'pl',
+    'Czech Republic': 'cz', Hungary: 'hu', Romania: 'ro', Bulgaria: 'bg',
+    Croatia: 'hr', Serbia: 'rs', Europe: 'eu',
+    'Middle East & Africa': 'ae', 'Asia Pacific': 'jp',
+    Americas: 'us', 'North Africa': 'tn', 'North America': 'us',
   };
 
-  const code = codeMap[country];
+  const code = nameCodeMap[country];
   return code ? `https://flagcdn.com/w80/${code}.png` : null;
 };
 
@@ -132,7 +136,7 @@ export const DestinationCard = ({ destination, onPress, flagVariant = 'default' 
   const [flagLoadFailed, setFlagLoadFailed] = useState(false);
   const flagUri = getFlagUri(destination.countryCode, destination.country);
   const emojiFlag = useMemo(() => getCountryFlag(destination.country), [destination.country]);
-  const shouldRenderImageFlag = isAuthenticFlag && Boolean(flagUri) && !flagLoadFailed;
+  const shouldRenderImageFlag = Boolean(flagUri) && !flagLoadFailed;
 
   useEffect(() => {
     setFlagLoadFailed(false);
@@ -142,7 +146,7 @@ export const DestinationCard = ({ destination, onPress, flagVariant = 'default' 
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${destination.country}, à partir de ${startingPrice.toFixed(2)} TND`}
+      accessibilityLabel={`${destination.country}`}
       accessibilityHint="Ouvre la liste des forfaits pour cette destination"
       style={({ pressed }) => [styles.pressable, pressed ? styles.pressablePressed : undefined]}
     >
@@ -180,18 +184,28 @@ export const DestinationCard = ({ destination, onPress, flagVariant = 'default' 
                   </View>
                 </View>
               </View>
-
-              <View style={styles.authenticPriceBlock}>
-                <Text style={styles.priceValueAuthentic}>
-                  {startingPrice.toFixed(2)} <Text style={styles.authenticPriceCurrency}>TND</Text>
-                </Text>
+              <View style={styles.chevronWrap}>
+                <Ionicons
+                  color={colors.primary.DEFAULT}
+                  name="chevron-forward"
+                  size={sizes.icon.sm}
+                />
               </View>
             </View>
           ) : (
             <>
               <View style={styles.row}>
                 <View style={styles.flagWrap}>
-                  <Text style={styles.flagText}>{getCountryFlag(destination.country)}</Text>
+                  {shouldRenderImageFlag && flagUri ? (
+                    <Image
+                      source={{ uri: flagUri }}
+                      style={styles.flagImageDefault}
+                      resizeMode="cover"
+                      onError={() => setFlagLoadFailed(true)}
+                    />
+                  ) : (
+                    <Text style={styles.flagText}>{emojiFlag}</Text>
+                  )}
                 </View>
 
                 <View style={styles.mainContent}>
@@ -224,7 +238,6 @@ export const DestinationCard = ({ destination, onPress, flagVariant = 'default' 
 const styles = StyleSheet.create({
   pressable: {
     ...patterns.pressableBase,
-    marginBottom: spacing.md,
   },
   pressablePressed: {
     ...patterns.pressablePressed,
@@ -245,7 +258,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     height: sizes.avatar.lg,
     justifyContent: 'center',
+    overflow: 'hidden',
     width: sizes.avatar.lg,
+  },
+  flagImageDefault: {
+    width: sizes.avatar.sm,
+    height: sizes.icon.lg,
+    borderRadius: radii.xs,
   },
   flagText: {
     ...typography.titleMD,
@@ -256,9 +275,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.sm,
     borderWidth: 1,
-    height: sizes.touch.sm,
+    height: sizes.touch.lg,
     justifyContent: 'center',
-    width: 56,
+    width: sizes.touch.lg,
     overflow: 'hidden',
     ...shadows.medium,
   },
@@ -273,7 +292,8 @@ const styles = StyleSheet.create({
   authenticRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    minHeight: sizes.touch.sm,
+    justifyContent: 'space-between',
+    minHeight: sizes.touch.lg,
   },
   authenticCenterGroup: {
     alignItems: 'center',
@@ -297,14 +317,14 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 3,
+    marginTop: spacing.xs,
     gap: spacing.xs,
   },
   networkChip: {
     backgroundColor: colors.primary[100],
-    borderRadius: radii.xs,
+    borderRadius: radii.full,
     paddingHorizontal: spacing.xs,
-    paddingVertical: 1,
+    paddingVertical: spacing.xxs,
   },
   networkChipText: {
     ...typography.bodyXS,
@@ -314,26 +334,6 @@ const styles = StyleSheet.create({
   coverageLabelText: {
     ...typography.bodySM,
     color: colors.text.secondary,
-  },
-  authenticPriceBlock: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    marginLeft: spacing.md,
-    flexShrink: 0,
-  },
-  authenticPriceDes: {
-    ...typography.bodyXS,
-    color: colors.text.tertiary,
-  },
-  priceValueAuthentic: {
-    ...typography.titleSM,
-    color: colors.primary.DEFAULT,
-    fontWeight: '800',
-  },
-  authenticPriceCurrency: {
-    ...typography.bodySM,
-    color: colors.primary.DEFAULT,
-    fontWeight: '700',
   },
   countryText: {
     ...typography.bodyLG,

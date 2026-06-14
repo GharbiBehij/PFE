@@ -4,7 +4,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
 import { TransactionRepository } from '../transaction/transaction.repository';
-import { AuditLogService } from 'src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from 'src/AuditLog/AuditLog.service';
 import { RetryableError, TerminalError } from '../Queue/utils/errors';
 import { PurchaseJobData } from 'src/Queue/Interfaces/Queue.interfaces';
 import {
@@ -21,7 +21,7 @@ import {
   Esim,
 } from '@prisma/client';
 import { Job } from 'bullmq';
-import { ProviderAdapter } from 'src/esim/interfaces/provider-adapter.interface';
+import { ProviderAdapter } from 'src/Adapters/provider-adapter.interface';
 import { PROVIDER_ADAPTER } from 'src/esim/adapters/provider-adapter.token';
 import { WalletService } from '../WalletTransaction/wallet.service';
 
@@ -42,7 +42,7 @@ function isInfraError(err: unknown): boolean {
   return (
     e?.status >= 500 || // Network errors DNS errors, and 5xx from provider
     e?.code === 'ECONNRESET' || // Connection reset by peer
-    e?.code === 'ETIMEDOUT' ||// Connection timed out
+    e?.code === 'ETIMEDOUT' || // Connection timed out
     e?.code >= 429 // rate limit errors
   );
 }
@@ -76,7 +76,7 @@ export class PurchaseService {
     );
 
     if (tx.status === 'COMPLETED' || tx.status === 'FAILED') {
-      return ;
+      return;
     }
 
     // ── Phase 2: eSIM idempotency check (outside transaction) ─────────────
@@ -90,7 +90,7 @@ export class PurchaseService {
     if (existingEsim) {
       this.logger.log(
         `[provisioning] txId=${transactionId} eSIM already exists ` +
-        `(iccid=${existingEsim.iccid}) — skipping provider call`,
+          `(iccid=${existingEsim.iccid}) — skipping provider call`,
       );
       esimData = {
         iccid: existingEsim.iccid,
@@ -169,7 +169,7 @@ export class PurchaseService {
     if (tx.status !== 'PROVISIONING') {
       throw new TerminalError(
         `Unexpected status for provisioning: ` +
-        `txId=${transactionId} status=${tx.status}`,
+          `txId=${transactionId} status=${tx.status}`,
       );
     }
 
@@ -178,8 +178,9 @@ export class PurchaseService {
       await this.validatePaymentExists(transactionId);
     }
 
-    // B2B2C — verify wallet is in a processable state
-    if (channel === 'B2B2C') {
+    // B2B2C WALLET — verify wallet is in a processable state
+    // CASH flow skips wallet reservation entirely (physical cash collected by reseller)
+    if (channel === 'B2B2C' && job.data.paymentMethod !== 'CASH') {
       await this.validateWalletState(transactionId);
     }
 
@@ -232,9 +233,7 @@ export class PurchaseService {
   // PHASE 2 — ESIM IDEMPOTENCY CHECK
   // ══════════════════════════════════════════════════════════════════════════
 
-  private async findExistingEsim(
-    transactionId: number,
-  ): Promise<Esim | null> {
+  private async findExistingEsim(transactionId: number): Promise<Esim | null> {
     try {
       return await this.prisma.esim.findUnique({
         where: { transactionId },
@@ -279,7 +278,7 @@ export class PurchaseService {
         transactionId,
         offerId,
         country: tx.offer.country,
-        dataVolume: tx.offer.dataVolume,
+        dataVolume: tx.offer.dataVolume ?? 0,
         validityDays: tx.offer.validityDays,
         providerId: tx.offer.providerId,
         userId,
@@ -328,20 +327,19 @@ export class PurchaseService {
           data: { status: 'FAILED' },
         });
 
-        // B2B2C: release reserved funds atomically with status update
-        if (channel === 'B2B2C') {
+        // B2B2C WALLET: release reserved funds atomically with status update
+        // CASH flow has no wallet reservation — skip
+        if (channel === 'B2B2C' && job.data.paymentMethod !== 'CASH') {
           await prismaTx.walletTransaction.update({
             where: { transactionId },
             data: { status: 'RELEASED' },
           });
           await prismaTx.walletLedger.create({
             data: {
-              walletId: (
-                await prismaTx.walletTransaction.findUnique({
-                  where: { transactionId },
-                  select: { id: true },
-                })
-              )!.id,
+              walletId: (await prismaTx.walletTransaction.findUnique({
+                where: { transactionId },
+                select: { id: true },
+              }))!.id,
               amount: tx.offer.price,
               type: LedgerType.CREDIT,
               reason: LedgerReason.RELEASE,
@@ -408,14 +406,15 @@ export class PurchaseService {
               providerId: tx.offer.providerId,
               transactionId,
               offerId: tx.offer.id,
-              dataTotal: tx.offer.dataVolume,
+              dataTotal: tx.offer.dataVolume ?? undefined,
             },
           });
         }
 
-        // B2B2C: commit wallet in same transaction as eSIM creation
+        // B2B2C WALLET: commit wallet in same transaction as eSIM creation
         // so eSIM exists ↔ wallet committed are always in sync
-        if (channel === 'B2B2C') {
+        // CASH flow has no wallet reservation — skip
+        if (channel === 'B2B2C' && job.data.paymentMethod !== 'CASH') {
           const wallet = await prismaTx.walletTransaction.update({
             where: { transactionId },
             data: { status: 'COMMITTED' },

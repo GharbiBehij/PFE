@@ -7,15 +7,25 @@ type QrCodeCardProps = {
 };
 
 export const QrCodeCard = ({ value }: QrCodeCardProps) => {
+  const hasValue = Boolean(value && value.trim().length > 0);
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Code QR d'activation</Text>
       <View style={styles.codeContainer}>
-        <QRCode size={180} value={value} />
+        {hasValue ? (
+          <QRCode size={180} value={value} />
+        ) : (
+          <View style={styles.placeholder}>
+            <Text style={styles.placeholderText}>Code non disponible</Text>
+          </View>
+        )}
       </View>
-      <Text selectable style={styles.value}>
-        {value}
-      </Text>
+      {hasValue ? (
+        <Text selectable style={styles.value}>
+          {value}
+        </Text>
+      ) : null}
     </View>
   );
 };
@@ -40,6 +50,19 @@ const styles = StyleSheet.create({
     ...typography.bodySM,
     color: colors.text.secondary,
     marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  placeholder: {
+    width: 180,
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+  },
+  placeholderText: {
+    ...typography.bodySM,
+    color: colors.text.tertiary,
     textAlign: 'center',
   },
 });

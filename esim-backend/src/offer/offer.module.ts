@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { OfferService } from './offer.service';
 import { OfferController } from './offer.controller';
 import { OfferRepository } from './offer.repository';
@@ -6,7 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EsimModule } from '../esim/esim.module';
 
 @Module({
-  imports: [EsimModule],
+  imports: [forwardRef(() => EsimModule)],
   controllers: [OfferController],
   providers: [OfferService, OfferRepository, PrismaService],
   exports: [OfferService],

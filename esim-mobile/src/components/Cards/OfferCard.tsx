@@ -28,11 +28,13 @@ export const OfferCard = ({ offer, isSelected, isBestValue, onSelect }: OfferCar
         >
           <View style={styles.row}>
             <View style={styles.content}>
-              {isBestValue ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Meilleur rapport</Text>
-                </View>
-              ) : null}
+              <View style={styles.badgeRow}>
+                {isBestValue ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>Meilleur rapport</Text>
+                  </View>
+                ) : null}
+              </View>
 
               <Text style={styles.dataText}>
                 {formatData(offer.dataVolume)}
@@ -107,11 +109,15 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  badgeRow: {
+    height: 26,
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: colors.secondary[400],
     borderRadius: radii.full,
-    marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
@@ -189,5 +195,5 @@ const formatPrice = (price: number) => {
     return '0.00 TND';
   }
 
-  return `${value.toFixed(2)} TND`;
+  return `${value.toFixed(3)} TND`;
 };

@@ -13,10 +13,12 @@ export interface Offer {
   id: number;
   country: string;
   countryCode: string;
+  coverageType?: 'LOCAL' | 'REGIONAL' | 'GLOBAL';
   dataVolume: string;
   validityDays: number;
   price: number;
   currency: string;
+  title: string;
   providerId: string;
   description?: string;
   popularity?: number;

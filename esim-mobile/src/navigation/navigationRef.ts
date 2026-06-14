@@ -3,8 +3,8 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 export type RootNavigationParamList = {
   MainTabs: undefined;
   Onboarding: { skipAnimation?: boolean } | undefined;
-  Login: { source?: 'onboarding' | 'app' } | undefined;
-  Register: { source?: 'onboarding' | 'app' } | undefined;
+  Login: { source?: 'onboarding' | 'app'; returnTo?: string; packageId?: string } | undefined;
+  Register: { source?: 'onboarding' | 'app'; returnTo?: string; packageId?: string } | undefined;
   ResellerLogin: undefined;
 };
 
@@ -15,6 +15,6 @@ export function navigateTo<RouteName extends keyof RootNavigationParamList>(
   params?: RootNavigationParamList[RouteName],
 ) {
   if (navigationRef.isReady()) {
-    navigationRef.navigate(name, params);
+    navigationRef.navigate(name as any, params as any);
   }
 }

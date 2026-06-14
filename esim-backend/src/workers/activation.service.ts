@@ -3,7 +3,8 @@
 
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
-import { AuditLogService } from 'src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from 'src/AuditLog/AuditLog.service';
+import { EsimGateway } from '../gateway/esim.gateway';
 import { RetryableError, TerminalError } from '../Queue/utils/errors';
 import { ActivateJobData } from 'src/Queue/Interfaces/Queue.interfaces';
 import {
@@ -18,10 +19,9 @@ import {
   Offer,
   SystemEvent,
   Transaction,
-  providerStatus
-
+  providerStatus,
 } from '@prisma/client';
-import { ProviderAdapter } from '../esim/interfaces/provider-adapter.interface';
+import { ProviderAdapter } from '../Adapters/provider-adapter.interface';
 import { PROVIDER_ADAPTER } from '../esim/adapters/provider-adapter.token';
 import { Job } from 'bullmq';
 
@@ -44,9 +44,7 @@ const IN_FLIGHT_WINDOW_MS = 60 * 1_000;
 function isInfraError(err: unknown): boolean {
   const e = err as any;
   return (
-    e?.status >= 500 ||
-    e?.code === 'ECONNRESET' ||
-    e?.code === 'ETIMEDOUT'
+    e?.status >= 500 || e?.code === 'ECONNRESET' || e?.code === 'ETIMEDOUT'
   );
 }
 
@@ -60,6 +58,7 @@ export class ActivationService {
     private readonly prisma: PrismaService,
     @Inject(PROVIDER_ADAPTER) private readonly providerAdapter: ProviderAdapter,
     private readonly auditLogService: AuditLogService,
+    private readonly esimGateway: EsimGateway,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -73,11 +72,11 @@ export class ActivationService {
     const { tx, esim } = await this.fetchAndValidate(transactionId);
     //idempotency check: if transaction already SUCCEEDED or FAILED, skip processing (e.g. duplicate job delivery) — prevents changing eSIM status back to ACTIVE after a successful activation
     if (tx.status === 'SUCCEEDED' || tx.status === 'FAILED') {
-    return;
-  }
+      return;
+    }
     if (!esim || esim.status === EsimStatus.ACTIVE) {
-    return;
-  }
+      return;
+    }
     // ── Phase 2: Claim activation attempt (atomic) ────────────────────────
     const attempt = await this.claimAttempt(esim, job);
 
@@ -143,18 +142,24 @@ export class ActivationService {
     }
 
     if (!tx) throw new TerminalError('Transaction not found');
-    if (tx.status === 'SUCCEEDED') {
+    // Terminal-success states: eSIM was already activated — skip silently.
+    if (tx.status === 'SUCCEEDED' || tx.status === 'COMPLETED') {
       this.logger.log(
-        `[activation] txId=${transactionId} already SUCCEEDED — skipping`,
+        `[activation] txId=${transactionId} already ${tx.status} — skipping`,
       );
-      return { tx, esim: null as any }; // caller checks SUCCEEDED upstream
+      return { tx, esim: null as any };
     }
-    if (tx.status === 'FAILED') {
-      throw new TerminalError('Transaction already failed — will not activate');
-    }
-    if (tx.status !== 'PROCESSING') {
+    // Terminal-failure states: do not attempt activation.
+    if (tx.status === 'FAILED' || tx.status === 'REFUNDED' || tx.status === 'EXPIRED') {
       throw new TerminalError(
-        `Unexpected transaction status: ${tx.status}. Expected PROCESSING.`,
+        `Transaction ${transactionId} is terminal (${tx.status}) — will not activate`,
+      );
+    }
+    // Accept PROCESSING (B2B2C manual) and PROVISIONING (post-purchase auto).
+    // Any other unexpected status is a programming error → terminal.
+    if (tx.status !== 'PROCESSING' && tx.status !== 'PROVISIONING') {
+      throw new TerminalError(
+        `Unexpected transaction status for activation: ${tx.status}`,
       );
     }
 
@@ -424,6 +429,9 @@ export class ActivationService {
       details: { iccid: esim.iccid, reason: providerResult.message, channel },
     });
 
+    // Notify client in real-time — fire-and-forget, never block the worker
+    this.esimGateway.emitFailed(userId, transactionId);
+
     throw new TerminalError(
       `eSIM activation failed: ${providerResult.message}`,
     );
@@ -447,6 +455,10 @@ export class ActivationService {
     try {
       await this.prisma.$transaction(async (prismaTx) => {
         const now = new Date();
+        const dataTotal = tx.offer.dataVolume;
+        if (dataTotal == null) {
+          throw new Error('Missing dataTotal from offer');
+        }
 
         // Update eSIM — single update merging status + activation fields
         await prismaTx.esim.update({
@@ -454,7 +466,7 @@ export class ActivationService {
           data: {
             status: EsimStatus.ACTIVE,
             activatedAt: now,
-            dataTotal: tx.offer.dataVolume,
+            dataTotal: dataTotal,
             dataUsed: 0,
             lastUsageSync: now,
             expiryDate: new Date(
@@ -516,6 +528,13 @@ export class ActivationService {
       attemptNumber: job.attemptsMade,
       message: `eSIM ${esim.iccid} successfully activated`,
       details: { iccid: esim.iccid, channel },
+    });
+
+    // Notify client in real-time — fire-and-forget, never block the worker
+    this.esimGateway.emitActivated(userId, {
+      iccid: esim.iccid,
+      qrCode: esim.qrCode ?? null,
+      activationCode: esim.activationCode,
     });
   }
 }

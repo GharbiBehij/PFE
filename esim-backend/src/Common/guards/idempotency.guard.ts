@@ -14,19 +14,18 @@ const PENDING_MARKER = 'PENDING';
 
 @Injectable()
 export class IdempotencyGuard implements CanActivate {
-  constructor(
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {}
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request  = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
 
-    const userId  = request.user?.id;
+    const userId = request.user?.userId ?? request.user?.id;
     const { offerId, amount, channel } = request.body;
+    const esimId = request.params?.id ? Number(request.params.id) : undefined;
 
     // Generate deterministic key from request fingerprint
-    const key = this.generateKey(userId, offerId, amount, channel);
+    const key = this.generateKey(userId, offerId, amount, channel, esimId);
     const redisKey = `idempotency:${key}`;
 
     const existing = await this.redis.get(redisKey);
@@ -65,11 +64,18 @@ export class IdempotencyGuard implements CanActivate {
     offerId: number,
     amount: number,
     channel: string,
+    esimId?: number,
   ): string {
     // Time window — rounds to nearest 30 seconds
     // same request within 30s window = same key
-    const timeWindow = Math.floor(Date.now() / (IDEMPOTENCY_TTL_SECONDS * 1000));
-    const raw = `purchase:${userId}:${offerId}:${amount}:${channel}:${timeWindow}`;
+    const timeWindow = Math.floor(
+      Date.now() / (IDEMPOTENCY_TTL_SECONDS * 1000),
+    );
+    const isTopup =
+      channel === 'TOPUP' || (typeof esimId === 'number' && esimId > 0);
+    const raw = isTopup
+      ? `topup:${userId}:${esimId}:${offerId}:${amount}:TOPUP:${timeWindow}`
+      : `purchase:${userId}:${offerId}:${amount}:${channel}:${timeWindow}`;
     return crypto.createHash('sha256').update(raw).digest('hex');
   }
 }

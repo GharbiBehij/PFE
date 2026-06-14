@@ -14,7 +14,7 @@ import { useAuth } from '../../../hooks/client/useAuth';
 import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../../theme';
 
 const SUPPORT_EMAIL = 'support@netyfly.com';
-const SUPPORT_PHONE = '+216 00 000 000';
+const SUPPORT_PHONE = '+216 26497904';
 
 export const ResellerProfileScreen = () => {
   const tabBarHeight = useBottomTabBarHeight();
@@ -29,7 +29,7 @@ export const ResellerProfileScreen = () => {
         {
           text: 'Déconnexion',
           style: 'destructive',
-          onPress: async () => { await logout(); },
+          onPress: () => logout(),
         },
       ],
     );
@@ -194,6 +194,8 @@ const styles = StyleSheet.create({
   /* ── HEADER — mirrors HomeScreen ── */
   header: {
     ...patterns.headerShell,
+    backgroundColor: colors.primary.DEFAULT,
+    borderBottomColor: colors.primary.dark,
     borderBottomLeftRadius: radii.card,
     borderBottomRightRadius: radii.card,
   },
@@ -208,26 +210,26 @@ const styles = StyleSheet.create({
   },
   greetingSub: {
     ...typography.bodySM,
-    color: colors.text.secondary,
+    color: colors.state.onPrimaryOverlay80,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   headerTitle: {
     ...typography.titleLG,
-    color: colors.text.primary,
+    color: colors.text.onPrimary,
   },
   avatarCircle: {
     height: sizes.touch.sm,
     width: sizes.touch.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.primary[100],
+    backgroundColor: colors.state.onPrimaryOverlay20,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.medium,
   },
   avatarInitials: {
     ...typography.labelSM,
-    color: colors.primary.DEFAULT,
+    color: colors.white,
     fontWeight: '800',
   },
 
@@ -248,8 +250,8 @@ const styles = StyleSheet.create({
     ...shadows.medium,
   },
   promoIcon: {
-    width: 36,
-    height: 36,
+    width: sizes.iconWrap.sm,
+    height: sizes.iconWrap.sm,
     borderRadius: radii.sm,
     backgroundColor: colors.primary[100],
     alignItems: 'center',
@@ -286,6 +288,7 @@ const styles = StyleSheet.create({
   },
   pagePadding: {
     ...patterns.screenPadding,
+    marginTop: spacing.lg,
   },
   statsRow: {
     flexDirection: 'row',
@@ -328,7 +331,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     marginBottom: spacing.sm,
-    marginTop: spacing.lg,
+    marginTop: spacing.xxxl,
   },
   sectionTitle: {
     ...typography.overline,

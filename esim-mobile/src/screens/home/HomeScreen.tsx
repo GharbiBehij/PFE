@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   SlideInLeft,
   SlideInRight,
@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { RegionCard } from '../../components/Cards/RegionCard';
 import { DestinationCard } from '../../components/Cards/DestinationCard';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import {
@@ -17,10 +18,12 @@ import {
   ScreenHeader,
   ScreenShell,
 } from '../../components/layout';
+import { SectionLabel } from '../../components/SectionLabel';
 
 import { useAuth } from '../../hooks/client/useAuth';
 import { useDestinations } from '../../hooks/client/useOffers';
 import type { HomeStackParamList } from '../../navigation/types';
+import { useNotificationInbox } from '../../hooks/client/useNotificationInbox';
 
 import {
   colors,
@@ -53,6 +56,8 @@ export const HomeScreen = ({ navigation }: Props) => {
   const [activeTab, setActiveTab] = useState<HomeTab>('LOCAL');
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
   const { user } = useAuth();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const inbox = useNotificationInbox();
 
   const destinationsQuery = useDestinations();
   const accountName = `${user?.firstname ?? ''} ${user?.lastname ?? ''}`.trim()
@@ -89,13 +94,19 @@ export const HomeScreen = ({ navigation }: Props) => {
             <Text numberOfLines={1} style={styles.headerTitle}>{accountName}</Text>
           </View>
 
-          <Pressable style={styles.iconButton}>
+          <Pressable
+            style={styles.iconButton}
+            onPress={() => {
+              setShowNotifications(true);
+              void inbox.markRead();
+            }}
+          >
             <Ionicons
               name="notifications-outline"
               size={sizes.icon.md}
               color={colors.primary.DEFAULT}
             />
-            <View style={styles.notifBadge} />
+            {inbox.unreadCount > 0 ? <View style={styles.notifBadge} /> : null}
           </Pressable>
         </View>
 
@@ -166,7 +177,7 @@ export const HomeScreen = ({ navigation }: Props) => {
 
         {/* 🔹 CONTENT (TERTIARY) */}
         <View style={styles.contentSection}>
-          <Text style={styles.sectionTitle}>{sectionTitleByTab[activeTab]}</Text>
+          <SectionLabel>{sectionTitleByTab[activeTab]}</SectionLabel>
           {destinationsQuery.isLoading && (
             <View style={styles.stateCard}>
               <ActivityIndicator
@@ -198,34 +209,56 @@ export const HomeScreen = ({ navigation }: Props) => {
                   : SlideOutRight.duration(140)
               }
             >
-              {filteredDestinations.map((item, index) => (
-                <View
-                  key={item.id}
-                  style={index < filteredDestinations.length - 1 ? styles.destinationCardGap : undefined}
-                >
-                  <DestinationCard
-                    destination={item}
-                    flagVariant="authentic"
-                    onPress={() => {
-                      if (item.coverageType === 'LOCAL') {
-                        navigation.navigate('PackageListing', {
-                          countryId: item.country,
-                        });
-                      } else if (item.coverageType === 'REGIONAL') {
-                        navigation.navigate('PackageListing', {
-                          countryId: item.Region,
-                          coverageType: 'REGIONAL',
-                        });
-                      } else {
-                        navigation.navigate('PackageListing', {
-                          countryId: 'Mondial',
-                          coverageType: 'GLOBAL',
-                        });
-                      }
-                    }}
-                  />
+              {activeTab === 'REGIONAL' ? (
+                /* ── Single-column list of RegionCards ── */
+                <View>
+                  {(() => {
+                    const regions = Array.from(
+                      new Map(filteredDestinations.map((d) => [d.Region, d])).values(),
+                    );
+                    return regions.map((item, index) => (
+                      <View
+                        key={item.Region}
+                        style={index < regions.length - 1 ? styles.regionCardGap : undefined}
+                      >
+                        <RegionCard
+                          regionName={item.Region}
+                          onPress={() =>
+                            navigation.navigate('PackageListing', {
+                              countryId: item.Region,
+                              coverageType: 'REGIONAL',
+                            })
+                          }
+                        />
+                      </View>
+                    ));
+                  })()}
                 </View>
-                ))}
+              ) : (
+                filteredDestinations.map((item, index) => (
+                  <View
+                    key={item.id}
+                    style={index < filteredDestinations.length - 1 ? styles.destinationCardGap : undefined}
+                  >
+                    <DestinationCard
+                      destination={item}
+                      flagVariant="authentic"
+                      onPress={() => {
+                        if (item.coverageType === 'LOCAL') {
+                          navigation.navigate('PackageListing', {
+                            countryId: item.country,
+                          });
+                        } else {
+                          navigation.navigate('PackageListing', {
+                            countryId: 'Mondial',
+                            coverageType: 'GLOBAL',
+                          });
+                        }
+                      }}
+                    />
+                  </View>
+                ))
+              )}
               </Animated.View>
           )}
 
@@ -237,6 +270,26 @@ export const HomeScreen = ({ navigation }: Props) => {
         </View>
 
       </ScreenContent>
+
+      <Modal visible={showNotifications} transparent animationType="slide" onRequestClose={() => setShowNotifications(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Notifications</Text>
+              <Pressable onPress={() => setShowNotifications(false)}><Ionicons name="close" size={20} color={colors.text.primary} /></Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalList}>
+              {inbox.items.length === 0 ? <Text style={styles.emptyText}>Aucune notification pour le moment.</Text> : null}
+              {inbox.items.map((item) => (
+                <View key={item.id} style={styles.notificationItem}>
+                  <Text style={styles.notificationTitle}>{item.title}</Text>
+                  <Text style={styles.notificationBody}>{item.body}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScreenShell>
   );
 };
@@ -264,7 +317,7 @@ const styles = StyleSheet.create({
     ...typography.bodySM,
     color: colors.text.secondary,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
 
   headerTitle: {
@@ -284,20 +337,20 @@ const styles = StyleSheet.create({
 
   notifBadge: {
     position: 'absolute',
-    top: 7,
-    right: 7,
-    width: 7,
-    height: 7,
+    top: spacing.sm,
+    right: spacing.sm,
+    width: spacing.sm,
+    height: spacing.sm,
     borderRadius: radii.full,
     backgroundColor: colors.secondary.DEFAULT,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.surface,
   },
 
   /* SEARCH */
   search: {
     ...patterns.searchField,
-    minHeight: sizes.button.minHeight,
+    minHeight: sizes.touch.lg,
     paddingHorizontal: spacing.md,
   },
 
@@ -317,7 +370,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceCard,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.card,
@@ -326,8 +379,8 @@ const styles = StyleSheet.create({
   },
 
   promoIcon: {
-    width: 36,
-    height: 36,
+    width: sizes.avatar.md,
+    height: sizes.avatar.md,
     borderRadius: radii.sm,
     backgroundColor: colors.primary[100],
     alignItems: 'center',
@@ -336,7 +389,7 @@ const styles = StyleSheet.create({
   },
 
   promoEmoji: {
-    fontSize: 18,
+    fontSize: sizes.icon.md,
   },
 
   promoText: {
@@ -352,7 +405,7 @@ const styles = StyleSheet.create({
   promoSub: {
     ...typography.bodySM,
     color: colors.text.secondary,
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
 
   /* FILTERS */
@@ -366,7 +419,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceCard,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.xl,
+    borderRadius: radii.full,
+    padding: spacing.xxs,
     overflow: 'hidden',
     ...shadows.low,
   },
@@ -374,7 +428,10 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    minHeight: sizes.touch.sm,
+    paddingVertical: spacing.xs,
   },
 
   tabActive: {
@@ -397,15 +454,15 @@ const styles = StyleSheet.create({
     ...patterns.screenPadding,
   },
 
-  sectionTitle: {
-    ...typography.overline,
-    color: colors.text.secondary,
-    marginBottom: spacing.md,
-  },
 
   destinationCardGap: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
+
+  regionCardGap: {
+    marginBottom: spacing.lg,
+  },
+
 
   stateCard: {
     ...patterns.card,
@@ -417,4 +474,18 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     textAlign: 'center',
   },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
+  modalSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    maxHeight: '70%',
+    padding: spacing.lg,
+  },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  modalTitle: { ...typography.titleSM, color: colors.text.primary, fontWeight: '700' },
+  modalList: { gap: spacing.sm, paddingBottom: spacing.lg },
+  notificationItem: { ...patterns.card, padding: spacing.md },
+  notificationTitle: { ...typography.labelMD, color: colors.text.primary },
+  notificationBody: { ...typography.bodySM, color: colors.text.secondary, marginTop: spacing.xs },
 });

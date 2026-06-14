@@ -31,6 +31,7 @@ import {
   WalletHistoryResponseDto,
 } from './dto/wallet-response.dto';
 import { ErrorResponseDto } from '../Common/dto/error-response.dto';
+import { TopUpService } from '../top-up/top-up.service';
 
 interface AuthRequest {
   user: { userId: number };
@@ -41,9 +42,10 @@ interface AuthRequest {
 @Controller('wallet')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class WalletController {
-  constructor(private readonly walletService: WalletService) {}
-
-  // ── SALESMAN ROUTES ────────────────────────────────────────────────────────
+  constructor(
+    private readonly walletService: WalletService,
+    private readonly topUpService: TopUpService,
+  ) {}
 
   @Get('balance')
   @Roles(Role.SALESMAN, Role.CLIENT)
@@ -107,7 +109,10 @@ export class WalletController {
     @Request() req: AuthRequest,
     @Body() dto: RequestTopUpDto,
   ) {
-    return this.walletService.requestTopUp(req.user.userId, dto.amount);
+    return this.topUpService.initiateTopUp(
+      { amount: dto.amount, paymentMethod: 'CASH' },
+      req.user.userId,
+    );
   }
 
   @Get('topup/history')
@@ -140,8 +145,6 @@ export class WalletController {
     );
   }
 
-  // ── ADMIN ROUTES ──────────────────────────────────────────────────────────
-
   @Get('topup/pending')
   @Roles(Role.ADMIN, Role.ZONE_CHIEF)
   @ApiOperation({ summary: 'Get pending top-up requests ' })
@@ -167,24 +170,9 @@ export class WalletController {
 
   @Post('topup/approve')
   @HttpCode(200)
-  @Roles(Role.ZONE_CHIEF,Role.ADMIN)
+  @Roles(Role.ZONE_CHIEF, Role.ADMIN)
   @ApiOperation({ summary: 'Approve a pending top-up request' })
   @ApiResponse({ status: 200, type: TopUpRequestResponseDto })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-    type: ErrorResponseDto,
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden',
-    type: ErrorResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Top-up request not found',
-    type: ErrorResponseDto,
-  })
   async approveTopUp(
     @Request() req: AuthRequest,
     @Body() dto: ApproveRejectTopUpDto,
@@ -197,21 +185,6 @@ export class WalletController {
   @Roles(Role.ZONE_CHIEF, Role.ADMIN)
   @ApiOperation({ summary: 'Reject a pending top-up request' })
   @ApiResponse({ status: 200, type: TopUpRequestResponseDto })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-    type: ErrorResponseDto,
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden',
-    type: ErrorResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Top-up request not found',
-    type: ErrorResponseDto,
-  })
   async rejectTopUp(
     @Request() req: AuthRequest,
     @Body() dto: ApproveRejectTopUpDto,

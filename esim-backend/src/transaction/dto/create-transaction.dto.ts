@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 import { TransactionStatus } from '@prisma/client';
 
-export type PaymentMethod = 'WALLET' | 'CASH';
+export type PaymentMethod = 'WALLET' | 'CASH' | 'CARD';
 export type TransactionChannelDto = 'B2C' | 'B2B2C';
 
 export class CreateTransactionDto {
@@ -47,6 +47,10 @@ export class CreateTransactionDto {
 
   @ApiPropertyOptional({ enum: ['WALLET', 'CASH'], example: 'WALLET' })
   paymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  activateNow?: boolean;
 }
 
 export class B2CPurchaseDto {
@@ -54,7 +58,11 @@ export class B2CPurchaseDto {
   @IsNumber()
   offerId: number;
 
-  @ApiProperty({ enum: ['WALLET', 'CASH'], example: 'WALLET' })
+  @ApiProperty({ enum: ['WALLET', 'CASH', 'CARD'], example: 'CARD' })
   @IsString()
   paymentMethod: string;
+
+  @ApiPropertyOptional({ example: true, description: 'B2B2C only — activate eSIM immediately after provisioning' })
+  @IsOptional()
+  activateNow?: boolean;
 }

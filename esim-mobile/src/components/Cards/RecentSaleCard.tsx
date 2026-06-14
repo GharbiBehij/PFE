@@ -1,7 +1,7 @@
 // components/Cards/RecentSaleCard.tsx
 import { View, Text, StyleSheet } from 'react-native';
 import { Card } from './Card';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, sizes, spacing, typography } from '../../theme';
 import type { RecentSale } from '../../types/reseller';
 
 type Props = {
@@ -76,9 +76,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.primary[100],
     borderRadius: radii.full,
-    height: 36,
+    height: sizes.iconWrap.sm,
     justifyContent: 'center',
-    width: 36,
+    width: sizes.iconWrap.sm,
     flexShrink: 0,
   },
   avatarText: {

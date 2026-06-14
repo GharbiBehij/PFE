@@ -48,8 +48,6 @@ export class WalletService {
     );
   }
 
-  // ── BALANCE & HISTORY ────────────────────────────────────────────────────
-
   async getBalance(userId: number) {
     return this.walletRepository.getBalance(userId);
   }
@@ -68,12 +66,6 @@ export class WalletService {
       page,
       limit,
     );
-  }
-
-  // ── TOP-UPS ─────────────────────────────────────────────────────────────
-
-  async requestTopUp(salesmanId: number, amount: number) {
-    return this.walletRepository.requestTopUp(salesmanId, amount);
   }
 
   async getPendingTopUps(page: number, limit: number) {

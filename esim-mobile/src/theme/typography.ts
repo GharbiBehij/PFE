@@ -36,6 +36,19 @@ export const typography = {
     lineHeight: 24,
   },
 
+  authHeadline: {
+    fontSize: 34,
+    fontWeight: '800' as const,
+    lineHeight: 42,
+  },
+
+  authWordmark: {
+    fontSize: 52,
+    fontWeight: '800' as const,
+    lineHeight: 58,
+    letterSpacing: -1,
+  },
+
   // Body
   bodyLG: {
     fontSize: 16,
@@ -90,6 +103,18 @@ export const typography = {
     lineHeight: 14,
     letterSpacing: 1.5,
     textTransform: 'uppercase' as const,
+  },
+
+  tabLabelClient: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    lineHeight: 14,
+  },
+
+  tabLabelReseller: {
+    fontSize: 9.5,
+    fontWeight: '700' as const,
+    lineHeight: 13,
   },
 
   // Button text

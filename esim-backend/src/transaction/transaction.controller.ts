@@ -9,10 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { TransactionService } from './transaction.service';
-import {
-  B2CPurchaseDto,
-  CreateTransactionDto,
-} from './dto/create-transaction.dto';
+import { B2CPurchaseDto } from './dto/create-transaction.dto';
 import { JwtAuthGuard } from '../auth/Guards/JwtAuthGuard';
 import { IdempotencyGuard } from '../Common/guards/idempotency.guard';
 import { REDIS_CLIENT } from '../Common/redis.provider';
@@ -29,7 +26,6 @@ import {
 } from '@nestjs/swagger';
 import {
   PurchaseResponseDto,
-  TransactionDetailCoreDto,
   TransactionDetailResponseDto,
   TransactionListResponseDto,
 } from './dto/transaction-response.dto';
@@ -79,15 +75,15 @@ export class TransactionController {
       return { status: 'FAILED', message: 'User not found' };
     }
     const offer = await this.offerService.findbyId(dto.offerId);
-  if (!offer) {
-    return { status: 'FAILED', message: 'Offer not found' };
-  }
+    if (!offer) {
+      return { status: 'FAILED', message: 'Offer not found' };
+    }
 
     const result = await this.purchaseOrchestrator.purchaseEsim(
       {
         offerId: dto.offerId,
         amount: offer.price,
-        currency: 'USD',
+        currency: 'TND',
         channel: 'B2C',
         paymentMethod: dto.paymentMethod as any,
         email: user.email,
@@ -96,6 +92,7 @@ export class TransactionController {
         passportId: user.passportId ?? '',
         userId: user.id,
         status: 'PENDING',
+        activateNow: dto.activateNow,
       },
       userId,
     );
@@ -112,19 +109,6 @@ export class TransactionController {
     }
 
     return result;
-  }
-
-  // Legacy endpoint — no idempotency guard (no financial operation)
-  @Post()
-  @ApiOperation({ summary: 'Legacy transaction create endpoint' })
-  @ApiResponse({ status: 201, type: TransactionDetailCoreDto })
-  @ApiResponse({
-    status: 404,
-    description: 'Offer not found',
-    type: ErrorResponseDto,
-  })
-  create(@Body() dto: CreateTransactionDto) {
-    return this.transactionService.createInitial(dto, dto.userId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -163,6 +147,42 @@ export class TransactionController {
     return this.transactionService.getTransactionDetail(
       (req.user as any).userId,
       +id,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/activate')
+  @ApiOperation({ summary: 'Activate a purchased eSIM after payment (B2C)' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'id', type: Number, example: 9001 })
+  @ApiResponse({ status: 201, description: 'Activation initiated' })
+  @ApiResponse({
+    status: 400,
+    description: 'Transaction not in PAID status',
+    type: ErrorResponseDto,
+  })
+  async activateEsim(@Req() req: Request, @Param('id') id: string) {
+    return this.purchaseOrchestrator.activateAfterPayment(
+      +id,
+      (req.user as any).userId,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, IdempotencyGuard)
+  @Post(':id/refund')
+  @ApiOperation({ summary: 'Request a refund for a transaction' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'id', type: Number, example: 9001 })
+  @ApiResponse({ status: 201, description: 'Refund issued' })
+  @ApiResponse({
+    status: 403,
+    description: 'Refund policy check failed',
+    type: ErrorResponseDto,
+  })
+  async requestRefund(@Req() req: Request, @Param('id') id: string) {
+    return this.transactionService.requestRefund(
+      Number(id),
+      (req.user as any).userId,
     );
   }
 }

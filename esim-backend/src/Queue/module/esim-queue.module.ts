@@ -8,16 +8,18 @@ import { ActivationService } from '../../workers/activation.service';
 import { EsimModule } from '../../esim/esim.module';
 import { TransactionModule } from '../../transaction/transaction.module';
 import { WalletModule } from '../../WalletTransaction/wallet.module';
-import { ProvisioningModule } from '../../ProvisionningEvent/AuditLog.module';
+import { ProvisioningModule } from '../../AuditLog/AuditLog.module';
+import { GatewayModule } from '../../gateway/gateway.module';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: ESIM_QUEUE }),
-    EsimModule,
+    forwardRef(() => EsimModule),
     forwardRef(() => TransactionModule),
-    WalletModule,
+    forwardRef(() => WalletModule),
     ProvisioningModule,
+    GatewayModule,
   ],
   providers: [
     EsimProducer,

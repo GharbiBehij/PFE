@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AuthWallModal } from '../../components/AuthWallModal';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
-import { PrimaryButton } from '../../components/Cards/PrimaryCard';
+import { ActionButton } from '../../components/Buttons';
 import { ScreenContent, ScreenHeader, ScreenShell } from '../../components/layout';
+import { SectionLabel } from '../../components/SectionLabel';
+import { useAuth } from '../../hooks/client/useAuth';
 import { useOfferDetail } from '../../hooks/client/useOffers';
 import type { HomeStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../theme';
@@ -17,6 +21,8 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
   const { packageId } = route.params;
   const insets = useSafeAreaInsets();
   const offerQuery = useOfferDetail(packageId);
+  const { isAuthenticated } = useAuth();
+  const [showAuthWall, setShowAuthWall] = useState(false);
 
   if (offerQuery.isLoading) {
     return (
@@ -70,7 +76,7 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
         showsVerticalScrollIndicator={false}
       >
         <LinearGradient
-          colors={[colors.primary.DEFAULT, colors.primary.dark]}
+          colors={[colors.primary.dark, colors.primary.DEFAULT]}
           end={{ x: 1, y: 1 }}
           start={{ x: 0, y: 0 }}
           style={styles.gradientCard}
@@ -86,7 +92,7 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
         </LinearGradient>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.includedTitle}>Ce qui est inclus</Text>
+          <SectionLabel style={styles.sectionLabel}>Ce qui est inclus</SectionLabel>
           <View style={styles.sectionBadge}>
             <Text style={styles.sectionBadgeText}>Premium</Text>
           </View>
@@ -126,12 +132,25 @@ export const PackageDetailScreen = ({ navigation, route }: Props) => {
         </View>
       </ScreenContent>
 
-      <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}>
-        <PrimaryButton
-          label="Continuer"
-          onPress={() => navigation.navigate('Payment', { packageId: String(offer.id) })}
+      <View style={[patterns.actionBar, { paddingBottom: Math.max(spacing.xxl, insets.bottom) }]}>
+        <ActionButton
+          label="Acheter maintenant"
+          style={{ flex: 1 }}
+          onPress={() => {
+            if (!isAuthenticated) {
+              setShowAuthWall(true);
+              return;
+            }
+            navigation.navigate('Payment', { packageId: String(offer.id) });
+          }}
         />
       </View>
+
+      <AuthWallModal
+        visible={showAuthWall}
+        onClose={() => setShowAuthWall(false)}
+        packageId={String(offer.id)}
+      />
     </ScreenShell>
   );
 };
@@ -242,9 +261,8 @@ const styles = StyleSheet.create({
   sectionHeader: {
     ...patterns.sectionHeaderRow,
   },
-  includedTitle: {
-    ...typography.titleSM,
-    color: colors.text.primary,
+  sectionLabel: {
+    marginBottom: 0,
   },
   sectionBadge: {
     backgroundColor: colors.primary[100],

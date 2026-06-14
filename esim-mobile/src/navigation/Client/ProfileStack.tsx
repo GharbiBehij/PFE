@@ -4,8 +4,6 @@ import { PaymentMethodsScreen } from '../../screens/profile/PaymentMethodsScreen
 import { PersonalDetailsScreen } from '../../screens/profile/PersonalDetailsScreen';
 import { ProfileScreen } from '../../screens/profile/ProfileScreen';
 import { SettingsScreen } from '../../screens/profile/SettingsScreen';
-import { TopUpScreen } from '../../screens/reseller/wallet/TopUpScreen';
-import { WalletScreen } from '../../screens/reseller/wallet/WalletScreen';
 import { colors } from '../../theme';
 import type { ProfileStackParamList } from '../types';
 
@@ -25,8 +23,6 @@ export const ProfileStack = () => {
       <Stack.Screen component={PaymentMethodsScreen} name="PaymentMethods" options={{ headerShown: false }} />
       <Stack.Screen component={SettingsScreen} name="Settings" options={{ headerShown: false }} />
       <Stack.Screen component={HelpCenterScreen} name="HelpCenter" options={{ headerShown: false }} />
-      <Stack.Screen component={WalletScreen} name="Wallet" options={{ headerShown: false }} />
-      <Stack.Screen component={TopUpScreen} name="TopUp" options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 };

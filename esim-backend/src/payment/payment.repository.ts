@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma, Transaction } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'prisma/prisma.service';
 import { ClicToPayService } from './clictopay/clictopay.service';
 
@@ -10,6 +11,7 @@ export class PaymentRepository {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clicToPayService: ClicToPayService,
+    private readonly config: ConfigService,
   ) {}
 
   async initiatePayment(transaction: Transaction): Promise<{
@@ -31,14 +33,17 @@ export class PaymentRepository {
 
     const orderNumber = `NF-${transaction.id}-${Date.now()}`;
 
+    const notificationUrl = this.config.get<string>('CLICTOPAY_WEBHOOK_URL');
+
     const result = await this.clicToPayService.registerOrder({
       orderNumber,
-      amount: transaction.amount *1000,
+      amount: transaction.amount,
       currency: 788,
       returnUrl: `${process.env.CLICTOPAY_SUCCESS_URL}`,
       failUrl: `${process.env.CLICTOPAY_FAIL_URL}`,
+      notificationUrl: notificationUrl ?? undefined,
       language: 'fr',
-      pageView: 'MOBILE',
+      pageView: 'DESKTOP',
       description: `NetyFly eSIM - Commande #${transaction.id}`,
       email: user?.email ?? undefined,
     });
@@ -47,7 +52,9 @@ export class PaymentRepository {
     if (!result.orderId || !result.formUrl) {
       const code = result.errorCode ?? 'unknown';
       const msg = result.errorMessage ?? 'Unknown ClicToPay error';
-      this.logger.error(`ClicToPay register failed for tx ${transaction.id}: [${code}] ${msg}`);
+      this.logger.error(
+        `ClicToPay register failed for tx ${transaction.id}: [${code}] ${msg}`,
+      );
 
       if (result.errorCode === 1) {
         throw new ConflictException('Order already processed');
@@ -112,8 +119,14 @@ export class PaymentRepository {
     return String(result.errorCode) === '0';
   }
 
-  async refundPayment(gatewayOrderId: string, amount: number): Promise<boolean> {
-    const result = await this.clicToPayService.refundOrder(gatewayOrderId, amount);
+  async refundPayment(
+    gatewayOrderId: string,
+    amount: number,
+  ): Promise<boolean> {
+    const result = await this.clicToPayService.refundOrder(
+      gatewayOrderId,
+      amount,
+    );
     return String(result.errorCode) === '0';
   }
 

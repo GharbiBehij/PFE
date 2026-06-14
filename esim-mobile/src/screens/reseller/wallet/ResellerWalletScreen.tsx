@@ -1,31 +1,28 @@
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
 import {
   Animated,
   BackHandler,
   Dimensions,
+  Modal,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorBanner } from '../../../components/ErrorBanner';
 import { LoadingOverlay } from '../../../components/LoadingOverlay';
-import { OutlineButton } from '../../../components/OutlineButton';
-import { PrimaryButton } from '../../../components/PrimaryButton';
+import { ActionButton, OutlineButton } from '../../../components/Buttons';
 import { ScreenContent, ScreenHeader, ScreenShell } from '../../../components/layout';
 import {
   useResellerWallet,
   type ResellerWalletActivity,
   type ResellerWalletActivityStatus,
-  type ResellerWalletActivityType,
 } from '../../../hooks/reseller/useResellerWallet';
-import type { ResellerWalletStackParamList } from '../../../navigation/types';
 import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../../theme';
 import { formatCurrency } from '../../../utils/formatCurrency';
 
@@ -37,8 +34,6 @@ type StatusFilter = 'all' | ResellerWalletActivityStatus;
 
 const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
   { key: 'all', label: 'Tout' },
-  { key: 'sale', label: 'Ventes' },
-  { key: 'commission', label: 'Commissions' },
   { key: 'topup', label: 'Recharges' },
 ];
 
@@ -47,6 +42,8 @@ const STATUS_FILTERS: { key: Exclude<StatusFilter, 'all'>; label: string; color:
   { key: 'pending', label: 'En cours', color: colors.warning.dark,    bg: colors.warning[50],   border: colors.warning[100] },
   { key: 'failed',  label: 'Échoué',   color: colors.error.dark,      bg: colors.error[50],     border: colors.error[100] },
 ];
+
+type ResellerWalletActivityType = 'commission' | 'sale' | 'topup';
 
 const activityIconConfig: Record<ResellerWalletActivityType, { iconName: keyof typeof Ionicons.glyphMap; bg: string; stroke: string }> = {
   commission: { iconName: 'trending-up', bg: colors.success[50],   stroke: colors.success.DEFAULT },
@@ -67,7 +64,6 @@ const getAmountStyle = (activity: ResellerWalletActivity): { text: string; color
 export const ResellerWalletScreen = () => {
   const tabBarHeight = useBottomTabBarHeight();
   const walletQuery = useResellerWallet();
-  const navigation = useNavigation<NativeStackNavigationProp<ResellerWalletStackParamList, 'Wallet'>>();
 
   const scrollRef = useRef<ScrollView>(null);
   const [activitySectionY, setActivitySectionY] = useState(0);
@@ -86,7 +82,7 @@ export const ResellerWalletScreen = () => {
   const isTopUpValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
 
   const openSheet = () => {
-    navigation.setParams({ hideTabBar: true });
+    translateY.setValue(screenHeight);
     setIsSheetVisible(true);
     Animated.timing(translateY, {
       toValue: 0,
@@ -102,13 +98,8 @@ export const ResellerWalletScreen = () => {
       useNativeDriver: true,
     }).start(() => {
       setIsSheetVisible(false);
-      navigation.setParams({ hideTabBar: false });
     });
-  }, [navigation, translateY]);
-
-  useEffect(() => {
-    navigation.setParams({ hideTabBar: false });
-  }, [navigation]);
+  }, [translateY]);
 
   useEffect(() => {
     if (!isSheetVisible) return;
@@ -147,6 +138,17 @@ export const ResellerWalletScreen = () => {
     setTopUpAmount('');
   };
 
+  // TODO: replace with real API data
+  const handleExportTopup = async () => {
+    const topupActivities = activities.filter((a) => a.type === 'topup');
+    const header = 'Date,Description,Montant,Statut';
+    const rows = topupActivities.map((a) =>
+      [a.date, `"${a.description}"`, a.amount, a.status].join(','),
+    );
+    const csv = [header, ...rows].join('\n');
+    await Share.share({ message: csv, title: 'recharges.csv' });
+  };
+
   if (walletQuery.isLoading) {
     return <LoadingOverlay message="Chargement du portefeuille..." />;
   }
@@ -172,10 +174,10 @@ export const ResellerWalletScreen = () => {
           </View>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={openSheet}
+            onPress={handleExportTopup}
             style={styles.iconButton}
           >
-            <Ionicons name="add" size={sizes.icon.md} color={colors.primary.DEFAULT} />
+            <Ionicons name="download-outline" size={sizes.icon.md} color={colors.text.onPrimary} />
           </TouchableOpacity>
         </View>
       </ScreenHeader>
@@ -204,12 +206,11 @@ export const ResellerWalletScreen = () => {
               ) : null}
             </View>
             <View style={styles.promoActions}>
-              <TouchableOpacity activeOpacity={0.85} onPress={openSheet} style={styles.topUpBtn}>
-                <Text style={styles.topUpText}>+ Recharger</Text>
-              </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.85} onPress={scrollToActivity} style={styles.histBtn}>
-                <Text style={styles.histText}>Historique</Text>
-              </TouchableOpacity>
+              <ActionButton
+                label="+ Recharger"
+                onPress={openSheet}
+                size="sm"
+              />
             </View>
           </View>
         </View>
@@ -244,7 +245,7 @@ export const ResellerWalletScreen = () => {
           <View onLayout={(event) => setActivitySectionY(event.nativeEvent.layout.y)}>
             {/* Section header + inline status filters */}
             <View style={styles.activityHeader}>
-              <Text style={styles.activityTitle}>Activité récente</Text>
+              <Text style={styles.activityTitle}>Historique des recharges</Text>
               <View style={styles.statusFilterRow}>
                 {STATUS_FILTERS.map((f) => {
                   const active = statusFilter === f.key;
@@ -301,11 +302,16 @@ export const ResellerWalletScreen = () => {
       </ScreenContent>
 
       {/* Top-up bottom sheet */}
-      {isSheetVisible ? (
-        <View style={styles.sheetRoot}>
-          <TouchableOpacity activeOpacity={1} onPress={closeSheet} style={styles.overlay} />
+      <Modal
+        visible={isSheetVisible}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={closeSheet}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={closeSheet} style={styles.overlay} />
 
-          <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+        <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
             <View style={styles.handle} />
 
             <View style={styles.sheetHeaderRow}>
@@ -384,15 +390,14 @@ export const ResellerWalletScreen = () => {
 
             <View style={styles.sheetActionsRow}>
               <OutlineButton label="Annuler" onPress={closeSheet} />
-              <PrimaryButton
+              <ActionButton
                 disabled={!isTopUpValid}
                 label="Demander une recharge"
                 onPress={onRequestTopUp}
               />
             </View>
-          </Animated.View>
-        </View>
-      ) : null}
+        </Animated.View>
+      </Modal>
     </ScreenShell>
   );
 };
@@ -465,6 +470,8 @@ const styles = StyleSheet.create({
   /* ── HEADER — mirrors HomeScreen ── */
   header: {
     ...patterns.headerShell,
+    backgroundColor: colors.primary.DEFAULT,
+    borderBottomColor: colors.primary.dark,
     borderBottomLeftRadius: radii.card,
     borderBottomRightRadius: radii.card,
   },
@@ -479,19 +486,19 @@ const styles = StyleSheet.create({
   },
   greetingSub: {
     ...typography.bodySM,
-    color: colors.text.secondary,
+    color: colors.state.onPrimaryOverlay80,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   headerTitle: {
     ...typography.titleLG,
-    color: colors.text.primary,
+    color: colors.text.onPrimary,
   },
   iconButton: {
     height: sizes.touch.sm,
     width: sizes.touch.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.primary[100],
+    backgroundColor: colors.state.onPrimaryOverlay18,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.medium,
@@ -514,8 +521,8 @@ const styles = StyleSheet.create({
     ...shadows.medium,
   },
   promoIcon: {
-    width: 36,
-    height: 36,
+    width: sizes.iconWrap.sm,
+    height: sizes.iconWrap.sm,
     borderRadius: radii.sm,
     backgroundColor: colors.primary[100],
     alignItems: 'center',
@@ -534,7 +541,7 @@ const styles = StyleSheet.create({
     ...typography.titleSM,
     color: colors.text.primary,
     fontWeight: '800',
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
   pendingText: {
     ...typography.bodySM,
@@ -545,31 +552,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     gap: spacing.xs,
   },
-  topUpBtn: {
-    backgroundColor: colors.secondary.DEFAULT,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 1,
-    ...shadows.medium,
-  },
-  topUpText: {
-    ...typography.labelSM,
-    color: colors.primary[900],
-    fontWeight: '700',
-  },
-  histBtn: {
-    backgroundColor: colors.primary[50],
-    borderColor: colors.primary[200],
-    borderRadius: radii.md,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 1,
-  },
-  histText: {
-    ...typography.labelSM,
-    color: colors.primary.DEFAULT,
-    fontWeight: '700',
-  },
+
 
   contentContainer: {
     paddingTop: spacing.lg,
@@ -581,12 +564,11 @@ const styles = StyleSheet.create({
   // Type filter chips
   typeFilterScroll: {
     marginBottom: spacing.lg,
-    marginHorizontal: -spacing.xl,
   },
   typeFilterRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: 0,
   },
   typeChip: {
     backgroundColor: colors.gray[100],
@@ -622,7 +604,7 @@ const styles = StyleSheet.create({
   },
   statusFilterRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   statusChip: {
     borderRadius: radii.full,
@@ -658,9 +640,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: radii.md,
     flexShrink: 0,
-    height: 36,
+    height: sizes.iconWrap.sm,
     justifyContent: 'center',
-    width: 36,
+    width: sizes.iconWrap.sm,
   },
   activityMiddle: {
     flex: 1,
@@ -721,9 +703,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.gray[100],
     borderRadius: radii.full,
-    height: 72,
+    height: sizes.iconWrap.lg,
     justifyContent: 'center',
-    width: 72,
+    width: sizes.iconWrap.lg,
   },
   emptyStateTitle: {
     ...typography.titleSM,
@@ -740,14 +722,6 @@ const styles = StyleSheet.create({
   },
 
   // Bottom sheet
-  sheetRoot: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 20,
-  },
   overlay: {
     backgroundColor: colors.overlay,
     flex: 1,

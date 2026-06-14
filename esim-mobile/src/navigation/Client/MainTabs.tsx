@@ -7,7 +7,7 @@ import { EsimsStack } from './EsimsStack';
 import { HomeStack } from './HomeStack';
 import { ProfileStack } from './ProfileStack';
 import { useAuth } from '../../hooks/client/useAuth';
-import { colors, patterns, shadows, sizes, spacing } from '../../theme';
+import { colors, patterns, shadows, sizes, spacing, typography } from '../../theme';
 import type { MainTabsParamList } from '../types';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 
@@ -17,11 +17,11 @@ const Tab = createBottomTabNavigator<MainTabsParamList>();
 
 const hiddenTabBarStyle = {
   display: 'none' as const,
-  height: 0,
-  minHeight: 0,
-  maxHeight: 0,
-  borderTopWidth: 0,
-  elevation: 0,
+  height: spacing[0],
+  minHeight: spacing[0],
+  maxHeight: spacing[0],
+  borderTopWidth: spacing[0],
+  elevation: shadows.none.elevation,
   opacity: 0,
 };
 const shouldShowTabBar = (
@@ -43,10 +43,13 @@ export const MainTabs = () => {
 
       return {
         ...patterns.bottomNav,
-        bottom: 0,
+        bottom: spacing[0],
         height: sizes.bottomNav.height + bottomInset,
         paddingBottom: bottomInset,
         paddingTop: spacing[0],
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        ...shadows.tabBar,
       };
     },
     [insets.bottom],
@@ -54,10 +57,14 @@ export const MainTabs = () => {
 
   return (
     <Tab.Navigator
+      key={isLoggedIn ? 'auth-tabs' : 'guest-tabs'}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarHideOnKeyboard: true,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        tabBarActiveTintColor: colors.primary.DEFAULT,
+        tabBarInactiveTintColor: colors.text.secondary,
+        tabBarLabelStyle: styles.tabLabel,
         tabBarItemStyle: {
           alignItems: 'center',
           justifyContent: 'center',
@@ -65,28 +72,18 @@ export const MainTabs = () => {
           paddingBottom: spacing.xs,
           minHeight: sizes.bottomNav.height,
         },
-        tabBarIcon: ({ focused }) => {
-          const iconName =
-            route.name === 'HomeTab'
-              ? focused
-                ? 'home'
-                : 'home-outline'
-              : route.name === 'EsimsTab'
-                ? focused
-                  ? 'globe'
-                  : 'globe-outline'
-                : focused
-                  ? 'person'
-                  : 'person-outline';
-
-          const iconColor = colors.primary.DEFAULT;
-
+        tabBarIcon: ({ focused, color }) => {
+          const iconMap: Record<string, [string, string]> = {
+            HomeTab:    ['home',           'home-outline'],
+            EsimsTab:   ['globe',           'globe-outline'],
+            ProfileTab: ['person',         'person-outline'],
+          };
+          const [on, off] = iconMap[route.name] ?? ['ellipse', 'ellipse-outline'];
           return (
             <Ionicons
-              color={iconColor}
-              name={iconName}
+              color={color}
+              name={(focused ? on : off) as any}
               size={sizes.bottomNav.iconSize}
-              style={focused ? styles.navIcon : styles.navIconInactive}
             />
           );
         },
@@ -164,14 +161,8 @@ export const MainTabs = () => {
 };
 
 const styles = StyleSheet.create({
-  navIcon: {
-    ...shadows.medium,
-    marginTop: spacing.xs,
-    opacity: 1,
-  },
-  navIconInactive: {
-    ...shadows.medium,
-    marginTop: spacing.xs,
-    opacity: 0.72,
+  tabLabel: {
+    ...typography.tabLabelClient,
+    marginBottom: spacing.xxs,
   },
 });

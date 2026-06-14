@@ -2,7 +2,7 @@ import { StyleSheet, Text } from 'react-native';
 import { typography } from '../theme';
 
 type CountryFlagProps = {
-  countryCode: string;
+  countryCode?: string;
   size?: number;
 };
 
@@ -16,7 +16,7 @@ const toFlagEmoji = (countryCode: string) => {
 };
 
 export const CountryFlag = ({ countryCode, size = 28 }: CountryFlagProps) => {
-  return <Text style={[styles.flag, { fontSize: size }]}>{toFlagEmoji(countryCode)}</Text>;
+  return <Text style={[styles.flag, { fontSize: size }]}>{toFlagEmoji(countryCode??'')}</Text>;
 };
 
 const styles = StyleSheet.create({

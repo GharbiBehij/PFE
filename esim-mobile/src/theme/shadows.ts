@@ -33,6 +33,22 @@ export const shadows = {
     elevation: 8,
   },
 
+  tabBar: {
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 12,
+  },
+
+  sheetTop: {
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 16,
+  },
+
   secondaryGlow: {
     shadowColor: colors.secondary.DEFAULT,
     shadowOffset: { width: 0, height: 4 },
@@ -40,6 +56,30 @@ export const shadows = {
     shadowRadius: 12,
     elevation: 6,
   },
+
+  glow: {
+    shadowColor: colors.secondary.DEFAULT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  // Elevated elements on dark/colored backgrounds (higher opacity for contrast)
+  floatCircle: {
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  cardDeep: {
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25,
+    shadowRadius: 32,
+    elevation: 16,
+  },
+
   // Keep subtle inner effect (used carefully)
   subtle: {
     shadowColor: colors.black,

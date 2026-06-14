@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,7 +12,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { ErrorBanner } from '../../../components/ErrorBanner';
 import { LoadingOverlay } from '../../../components/LoadingOverlay';
@@ -25,6 +30,7 @@ import { usePendingActivations } from '../../../hooks/reseller/usePendingActivat
 import { useRecentSales } from '../../../hooks/reseller/useRecentSales';
 import { useFeaturedOffer } from '../../../hooks/reseller/useFeaturedOffer';
 import { useAuth } from '../../../hooks/client/useAuth';
+import { useNotificationInbox } from '../../../hooks/client/useNotificationInbox';
 
 import type { ResellerDashboardStackParamList } from '../../../navigation/types';
 import {
@@ -40,6 +46,7 @@ import type { Offer } from '../../../types/offer';
 import type { PendingActivation } from '../../../types/reseller';
 import { formatCurrency } from '../../../utils/formatCurrency';
 import { formatDate } from '../../../utils/formatDate';
+import { ActionButton } from '../../../components/Buttons';
 
 type Props = NativeStackScreenProps<ResellerDashboardStackParamList, 'Dashboard'>;
 type Period = 'today' | 'week' | 'month';
@@ -52,13 +59,36 @@ const PERIODS: { key: Period; label: string }[] = [
 
 export const ResellerDashboardScreen = ({ navigation }: Props) => {
   const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const statsQuery = useDashboardStats();
   const recentSalesQuery = useRecentSales();
   const pendingActivationsQuery = usePendingActivations();
   const featuredOfferQuery = useFeaturedOffer();
   const { user } = useAuth();
+  const inbox = useNotificationInbox();
+
+  useFocusEffect(
+    useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ['reseller', 'transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['reseller', 'dashboardStats'] });
+    }, [queryClient]),
+  );
 
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('today');
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const navigateToActivation = (activation: PendingActivation) => {
+    navigation.navigate('ActivateESIM', {
+      id: activation.id,
+      customer: activation.customer,
+      phone: activation.phone,
+      country: activation.country,
+      package: activation.package,
+      amount: formatCurrency(activation.amount),
+      purchaseDate: activation.purchaseDate,
+    });
+  };
 
   const accountName = useMemo(() => {
     const firstName = user?.firstname ?? '';
@@ -78,17 +108,6 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
     (navigation.getParent() as any)?.navigate('WalletTab', { screen: 'Wallet' });
   };
 
-  const openActivation = (activation: PendingActivation) => {
-    navigation.navigate('ActivateESIM', {
-      id: activation.id,
-      customer: activation.customer,
-      phone: activation.phone,
-      country: activation.country,
-      package: activation.package,
-      amount: formatCurrency(activation.amount),
-      purchaseDate: formatDate(activation.purchaseDate),
-    });
-  };
 
   if (statsQuery.isLoading) {
     return <LoadingOverlay message="Chargement du tableau de bord..." />;
@@ -126,6 +145,18 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
     ? stats.thisWeekChange
     : stats.totalCustomersChange;
 
+  const periodSalesRate = selectedPeriod === 'today'
+    ? stats.todaySalesRate
+    : selectedPeriod === 'week'
+    ? stats.thisWeekSalesRate
+    : stats.monthSalesRate;
+
+  const periodCommissionRate = selectedPeriod === 'today'
+    ? stats.todayCommissionRate
+    : selectedPeriod === 'week'
+    ? stats.thisWeekCommissionRate
+    : stats.monthCommissionRate;
+
   const periodCommission = selectedPeriod === 'today'
     ? stats.todayCommission
     : selectedPeriod === 'week'
@@ -142,16 +173,60 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
             <Text numberOfLines={1} style={styles.headerTitle}>{accountName}</Text>
           </View>
 
-          <Pressable style={styles.iconButton}>
+          <Pressable
+            onPress={() => {
+              if (!showNotifications) void inbox.markRead();
+              setShowNotifications(v => !v);
+            }}
+            style={styles.iconButton}
+          >
             <Ionicons
               name="notifications-outline"
               size={sizes.icon.md}
-              color={colors.primary.DEFAULT}
+              color={colors.text.onPrimary}
             />
-            <View style={styles.notifBadge} />
+            {inbox.unreadCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeCount}>{inbox.unreadCount}</Text>
+              </View>
+            )}
           </Pressable>
         </View>
       </ScreenHeader>
+
+      {showNotifications && (
+        <>
+          {/* Full-screen transparent backdrop */}
+          <Pressable
+            style={styles.notifBackdrop}
+            onPress={() => setShowNotifications(false)}
+          />
+          {/* Dropdown panel */}
+          <View style={[styles.notifDropdown, { top: insets.top + 80 }]}>
+            <Text style={styles.notifDropdownTitle}>Notifications</Text>
+            <ScrollView
+              style={{ maxHeight: 260 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {inbox.items.length === 0 ? (
+                <Text style={styles.notifEmpty}>
+                  Aucune notification pour le moment.
+                </Text>
+              ) : inbox.items.map((item, i) => (
+                <View key={item.id}>
+                  <View style={styles.notifItem}>
+                    <Text style={styles.notifItemTitle}>{item.title}</Text>
+                    <Text style={styles.notifItemBody}>{item.body}</Text>
+                  </View>
+                  {i < inbox.items.length - 1 && (
+                    <View style={styles.notifDivider} />
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </>
+      )}
 
       <ScreenContent
         contentContainerStyle={[
@@ -178,13 +253,11 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
               <Text style={styles.promoLabel}>Solde disponible</Text>
               <Text style={styles.promoBalance}>{formatCurrency(stats.walletBalance)}</Text>
             </View>
-            <TouchableOpacity
-              activeOpacity={0.85}
+            <ActionButton
+              label="+ Recharger"
               onPress={openWalletTab}
-              style={styles.topUpBtn}
-            >
-              <Text style={styles.topUpText}>+ Recharger</Text>
-            </TouchableOpacity>
+              size="sm"
+            />
           </TouchableOpacity>
         </View>
 
@@ -221,8 +294,8 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
                 iconBg={colors.primary[100]}
                 label="Ventes"
                 value={String(periodSales)}
-                delta={periodSalesChange ?? '+0'}
-                deltaLabel="vs hier"
+                delta={periodSalesRate}
+                deltaLabel="vs période préc."
                 style={styles.kpiCardFlex}
               />
               <KpiCard
@@ -231,8 +304,8 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
                 iconBg={colors.success[50]}
                 label="Commission"
                 value={formatCurrency(periodCommission)}
-                delta="↑ 15%"
-                deltaLabel="taux"
+                delta={periodCommissionRate}
+                deltaLabel="vs période préc."
                 valueColor={colors.success.dark}
                 style={[styles.kpiCardFlex, styles.kpiCardCommission]}
               />
@@ -338,7 +411,8 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
                   activation={activation}
                   formattedAmount={formatCurrency(activation.amount)}
                   formattedDate={formatDate(activation.purchaseDate)}
-                  onPressActivate={() => openActivation(activation)}
+                  onPress={() => navigateToActivation(activation)}
+                  onPressActivate={() => navigateToActivation(activation)}
                 />
               ))
             )}
@@ -346,6 +420,7 @@ export const ResellerDashboardScreen = ({ navigation }: Props) => {
 
         </View>
       </ScreenContent>
+
     </ScreenShell>
   );
 };
@@ -374,22 +449,43 @@ const KpiCard = ({
   style,
   value,
   valueColor,
-}: KpiCardProps) => (
-  <View style={[styles.kpiCard, style]}>
-    <View style={[styles.kpiIconWrap, { backgroundColor: iconBg }]}>
-      <Ionicons color={iconColor} name={iconName} size={sizes.icon.sm} />
+}: KpiCardProps) => {
+  const isPositive = delta.startsWith('+');
+  const isNegative = delta.startsWith('-');
+  const isNeutral = delta === '--';
+  const deltaColor = isPositive
+    ? colors.success.dark
+    : isNegative
+    ? colors.error.DEFAULT
+    : colors.text.tertiary;
+  const arrowIcon: keyof typeof Ionicons.glyphMap | null = isPositive
+    ? 'arrow-up'
+    : isNegative
+    ? 'arrow-down'
+    : null;
+
+  return (
+    <View style={[styles.kpiCard, style]}>
+      <View style={[styles.kpiIconWrap, { backgroundColor: iconBg }]}>
+        <Ionicons color={iconColor} name={iconName} size={sizes.icon.sm} />
+      </View>
+      <View style={styles.kpiText}>
+        <Text style={styles.kpiLabel}>{label}</Text>
+        <Text style={[styles.kpiValue, valueColor ? { color: valueColor } : null]} numberOfLines={1}>
+          {value}
+        </Text>
+        <View style={styles.kpiDeltaRow}>
+          {arrowIcon && !isNeutral ? (
+            <Ionicons name={arrowIcon} size={10} color={deltaColor} />
+          ) : null}
+          <Text style={[styles.kpiDelta, { color: deltaColor }]}>
+            {delta}{isNeutral ? '' : ` ${deltaLabel}`}
+          </Text>
+        </View>
+      </View>
     </View>
-    <View style={styles.kpiText}>
-      <Text style={styles.kpiLabel}>{label}</Text>
-      <Text style={[styles.kpiValue, valueColor ? { color: valueColor } : null]} numberOfLines={1}>
-        {value}
-      </Text>
-      <Text style={styles.kpiDelta}>
-        ↑ {delta} {deltaLabel}
-      </Text>
-    </View>
-  </View>
-);
+  );
+};
 
 type FeaturedOfferCardProps = {
   offer: Offer;
@@ -452,6 +548,8 @@ const styles = StyleSheet.create({
   /* ── HEADER — mirrors HomeScreen ── */
   header: {
     ...patterns.headerShell,
+    backgroundColor: colors.primary.DEFAULT,
+    borderBottomColor: colors.primary.dark,
     borderBottomLeftRadius: radii.card,
     borderBottomRightRadius: radii.card,
   },
@@ -466,33 +564,97 @@ const styles = StyleSheet.create({
   },
   greetingSub: {
     ...typography.bodySM,
-    color: colors.text.secondary,
+    color: colors.state.onPrimaryOverlay80,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   headerTitle: {
     ...typography.titleLG,
-    color: colors.text.primary,
+    color: colors.text.onPrimary,
   },
   iconButton: {
     height: sizes.touch.sm,
     width: sizes.touch.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.primary[100],
+    backgroundColor: colors.state.onPrimaryOverlay18,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.medium,
   },
   notifBadge: {
     position: 'absolute',
-    top: 7,
-    right: 7,
-    width: 7,
-    height: 7,
+    top: -2,
+    right: -2,
+    minWidth: sizes.icon.sm,
+    height: sizes.icon.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.secondary.DEFAULT,
+    backgroundColor: colors.error.DEFAULT,
     borderWidth: 1.5,
-    borderColor: colors.surface,
+    borderColor: colors.primary.DEFAULT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xxs,
+  },
+  notifBadgeCount: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: '700',
+  },
+
+  /* ── Notification dropdown ── */
+  notifBackdrop: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 99,
+  },
+  notifDropdown: {
+    position: 'absolute',
+    right: spacing.xl,
+    width: 300,
+    maxHeight: 320,
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    zIndex: 100,
+    ...shadows.high,
+    overflow: 'hidden',
+  },
+  notifDropdownTitle: {
+    ...typography.labelMD,
+    color: colors.text.primary,
+    fontWeight: '700',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  notifItem: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  notifItemTitle: {
+    ...typography.labelSM,
+    color: colors.text.primary,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  notifItemBody: {
+    ...typography.bodySM,
+    color: colors.text.secondary,
+    lineHeight: 18,
+  },
+  notifDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.lg,
+  },
+  notifEmpty: {
+    ...typography.bodySM,
+    color: colors.text.tertiary,
+    textAlign: 'center',
+    padding: spacing.xl,
   },
 
   /* ── WALLET PROMO STRIP — mirrors HomeScreen promoStrip ── */
@@ -512,8 +674,8 @@ const styles = StyleSheet.create({
     ...shadows.medium,
   },
   promoIcon: {
-    width: 36,
-    height: 36,
+    width: sizes.iconWrap.sm,
+    height: sizes.iconWrap.sm,
     borderRadius: radii.sm,
     backgroundColor: colors.primary[100],
     alignItems: 'center',
@@ -533,19 +695,6 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontWeight: '800',
     marginTop: 2,
-  },
-  topUpBtn: {
-    backgroundColor: colors.secondary.DEFAULT,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexShrink: 0,
-    ...shadows.medium,
-  },
-  topUpText: {
-    ...typography.labelSM,
-    color: colors.primary[900],
-    fontWeight: '700',
   },
 
   /* ── PERIOD FILTER TABS — mirrors HomeScreen tabsWrap ── */
@@ -614,9 +763,9 @@ const styles = StyleSheet.create({
   kpiIconWrap: {
     alignItems: 'center',
     borderRadius: radii.md,
-    height: 36,
+    height: sizes.iconWrap.sm,
     justifyContent: 'center',
-    width: 36,
+    width: sizes.iconWrap.sm,
     flexShrink: 0,
   },
   kpiText: {
@@ -635,11 +784,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginTop: spacing.xxs,
   },
+  kpiDeltaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+    marginTop: spacing.xs,
+  },
   kpiDelta: {
     ...typography.labelSM,
-    color: colors.success.dark,
     fontWeight: '700',
-    marginTop: spacing.xs,
     fontSize: 10,
   },
 
@@ -662,7 +815,7 @@ const styles = StyleSheet.create({
   },
   sellCtaIconWrap: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: colors.state.onPrimaryOverlay90,
     borderRadius: radii.lg,
     height: sizes.touch.md,
     justifyContent: 'center',
@@ -678,12 +831,12 @@ const styles = StyleSheet.create({
   },
   sellCtaSubtitle: {
     ...typography.bodySM,
-    color: '#78600A',
+    color: colors.text.primary,
     marginTop: spacing.xxs,
   },
   sellCtaArrowWrap: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: colors.state.onPrimaryOverlay40,
     borderRadius: radii.full,
     height: sizes.touch.sm,
     justifyContent: 'center',
@@ -707,7 +860,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: sizes.touch.sm,
     justifyContent: 'center',
-    width: 56,
+    width: sizes.touch.lg,
     flexShrink: 0,
     marginRight: spacing.sm,
   },
@@ -723,7 +876,7 @@ const styles = StyleSheet.create({
   featuredSubtitle: {
     ...typography.bodySM,
     color: colors.text.secondary,
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
   featuredRight: {
     alignItems: 'center',
@@ -769,8 +922,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   sectionTitle: {
-    ...typography.overline,
-    color: colors.text.secondary,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text.primary,
   },
   sectionAction: {
     ...typography.labelMD,
@@ -788,14 +942,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.gray[100],
     borderRadius: radii.full,
-    height: 56,
+    height: sizes.touch.lg,
     justifyContent: 'center',
     marginBottom: spacing.sm,
-    width: 56,
+    width: sizes.touch.lg,
   },
   emptyText: {
     ...typography.bodyMD,
     color: colors.text.secondary,
     textAlign: 'center',
   },
+
 });

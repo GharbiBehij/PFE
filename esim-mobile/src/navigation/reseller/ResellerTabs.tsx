@@ -11,18 +11,17 @@ import { SellStack } from './SellStack';
 import { TransactionsStack } from './TransactionsStack';
 import { WalletStack } from './WalletStack';
 import { ResellerProfileScreen } from '../../screens/reseller/profile/ResellerProfileScreen';
-import { ProfileStack } from './ProfileStack';
 
 
 const Tab = createBottomTabNavigator<ResellerTabsParamList>();
 
 const hiddenTabBarStyle = {
   display: 'none' as const,
-  height: 0,
-  minHeight: 0,
-  maxHeight: 0,
-  borderTopWidth: 0,
-  elevation: 0,
+  height: spacing[0],
+  minHeight: spacing[0],
+  maxHeight: spacing[0],
+  borderTopWidth: spacing[0],
+  elevation: shadows.none.elevation,
   opacity: 0,
 };
 
@@ -35,6 +34,10 @@ const shouldShowTabBar = (
 };
 
 const shouldShowWalletTabBar = (route: any) => {
+  if (route?.params?.hideTabBar === true) {
+    return false;
+  }
+
   const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'Wallet';
   if (focusedRoute !== 'Wallet') {
     return false;
@@ -57,10 +60,13 @@ export const ResellerTabs = () => {
 
       return {
         ...patterns.bottomNav,
-        bottom: 0,
+        bottom: spacing[0],
         height: sizes.bottomNav.height + bottomInset,
         paddingBottom: bottomInset,
         paddingTop: spacing[0],
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        ...shadows.tabBar,
       };
     },
     [insets.bottom],
@@ -85,28 +91,20 @@ export const ResellerTabs = () => {
         tabBarIcon: ({ color, focused }) => {
           const iconName =
             route.name === 'DashboardTab'
-              ? focused
-                ? 'home'
-                : 'home-outline'
+              ? focused ? 'home' : 'home-outline'
               : route.name === 'SellTab'
-                ? focused
-                  ? 'add-circle'
-                  : 'add-circle-outline'
+                ? focused ? 'add-circle' : 'add-circle-outline'
                 : route.name === 'TransactionsTab'
-                  ? focused
-                    ? 'receipt'
-                    : 'receipt-outline'
-                : route.name === 'WalletTab'
-                  ? focused ? 'wallet' : 'wallet-outline'
-                  : focused ? 'person' : 'person-outline'; 
-                  
+                  ? focused ? 'receipt' : 'receipt-outline'
+                  : route.name === 'WalletTab'
+                    ? focused ? 'wallet' : 'wallet-outline'
+                    : focused ? 'person' : 'person-outline';
 
           return (
             <Ionicons
               color={color}
               name={iconName}
               size={sizes.bottomNav.iconSize}
-              style={focused ? styles.navIcon : styles.navIconInactive}
             />
           );
         },
@@ -156,40 +154,23 @@ export const ResellerTabs = () => {
             : hiddenTabBarStyle,
         })}
       />
-        <Tab.Screen
-  component={ResellerProfileScreen}
-  name="ProfileTab"
-  options={({ route }) => ({
-    tabBarLabel: 'Profil',
-    tabBarIcon: ({ color, focused }) => (
-      <Ionicons
-        color={color}
-        name={focused ? 'person' : 'person-outline'}
-        size={sizes.bottomNav.iconSize}
+      <Tab.Screen
+        component={ResellerProfileScreen}
+        name="ProfileTab"
+        options={({ route }) => ({
+          tabBarLabel: 'Profil',
+          tabBarStyle: shouldShowTabBar(route, 'Profile')
+            ? floatingTabBarStyle
+            : hiddenTabBarStyle,
+        })}
       />
-    ),
-    tabBarStyle: shouldShowTabBar(route, 'Profile')
-      ? floatingTabBarStyle
-      : hiddenTabBarStyle,
-  })}
-/>  
     </Tab.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
-  navIcon: {
-    ...shadows.medium,
-    marginTop: spacing.xxs,
-    opacity: 1,
-  },
-  navIconInactive: {
-    ...shadows.medium,
-    marginTop: spacing.xxs,
-    opacity: 0.72,
-  },
   tabLabel: {
-    ...typography.labelSM,
-    marginBottom: spacing.xs,
+    ...typography.tabLabelReseller,
+    marginBottom: spacing.xxs,
   },
 });

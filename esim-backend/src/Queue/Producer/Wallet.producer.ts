@@ -14,10 +14,10 @@ export class WalletProducer {
   async enqueueDebit(data: WalletDebitJobData) {
     return this.queue.add(JOB_TOPUP_CREDIT, data, {
       jobId: `wallet-debit-${data.transactionId}`,
-      attempts: 5,
+      attempts: 2,
       backoff: {
         type: 'exponential',
-        delay: 5000,
+        delay: 1000,
       },
       timeout: 30_000,
       removeOnComplete: true,
@@ -27,10 +27,10 @@ export class WalletProducer {
   async enqueueTopUpCredit(data: TopUpJobData) {
     return this.queue.add(JOB_WALLET_DEBIT, data, {
       jobId: `wallet-credit-${data.topUpRequestId}`,
-      attempts: 5,
+      attempts: 2,
       backoff: {
         type: 'exponential',
-        delay: 5000,
+        delay: 1000,
       },
       timeout: 30_000,
       removeOnComplete: true,

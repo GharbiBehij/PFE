@@ -1,16 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { colors, radii, shadows, sizes, spacing, typography } from '../../theme';
+import { colors, patterns, sizes, spacing, typography } from '../../theme';
 import type { Offer } from '../../types/offer';
 
 type PackageCardProps = {
   offer: Offer;
   selected?: boolean;
-  isBestValue?: boolean;
   onPress: () => void;
 };
 
-export const PackageCard = ({ offer, selected, isBestValue, onPress }: PackageCardProps) => {
+export const PackageCard = ({ offer, selected, onPress }: PackageCardProps) => {
+  const network = offer.networkType ?? '4G';
   return (
     <TouchableOpacity
       accessibilityRole="button"
@@ -20,20 +20,14 @@ export const PackageCard = ({ offer, selected, isBestValue, onPress }: PackageCa
       onPress={onPress}
       style={[styles.card, selected && styles.cardSelected]}
     >
-      {isBestValue && (
-        <View style={styles.bestValueBadge}>
-          <Text style={styles.bestValueText}>Meilleur</Text>
-        </View>
-      )}
-
       <View style={styles.row}>
         <View style={styles.info}>
           <Text style={styles.dataVolume}>{offer.dataVolume}</Text>
-          <Text style={styles.meta}>{`${offer.validityDays} jours • 4G/5G`}</Text>
+          <Text style={styles.meta}>{`${offer.validityDays} jours • ${network}`}</Text>
         </View>
 
         <View style={styles.right}>
-          <Text style={styles.price}>{`${offer.price.toFixed(2)} ${offer.currency ?? 'TND'}`}</Text>
+          <Text style={styles.price}>{`${offer.price.toFixed(3)} TND`}</Text>
           <Ionicons
             color={selected ? colors.primary.DEFAULT : colors.text.secondary}
             name="chevron-forward"
@@ -47,32 +41,14 @@ export const PackageCard = ({ offer, selected, isBestValue, onPress }: PackageCa
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceCard,
-    borderColor: colors.border,
-    borderRadius: radii.card,
-    borderWidth: 1,
+    ...patterns.selectableCard,
     marginBottom: spacing.md,
     minHeight: sizes.card.minHeight,
     padding: spacing.lg,
-    ...shadows.medium,
   },
   cardSelected: {
-    borderColor: colors.primary.DEFAULT,
+    ...patterns.selectableCardSelected,
     borderWidth: 2,
-    ...shadows.high,
-  },
-  bestValueBadge: {
-    backgroundColor: colors.primary[100],
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    alignSelf: 'flex-start',
-    marginBottom: spacing.sm,
-  },
-  bestValueText: {
-    ...typography.labelSM,
-    color: colors.primary.DEFAULT,
-    fontWeight: '700',
   },
   row: {
     alignItems: 'center',

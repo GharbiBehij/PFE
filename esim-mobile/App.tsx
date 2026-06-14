@@ -6,7 +6,8 @@ import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
-import { RootNavigator } from './src/navigation/Client/RootNavigator';
+import { ToastProvider } from './src/context/ToastContext';
+import { RootNavigator } from './src/navigation/RootNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 import { usePushNotifications } from './src/hooks/client/usePushNotifications';
 import { colors } from './src/theme';
@@ -36,10 +37,12 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <NavigationContainer ref={navigationRef}>
-              <StatusBar style="dark" />
-              <AppContent />
-            </NavigationContainer>
+            <ToastProvider>
+              <NavigationContainer ref={navigationRef}>
+                <StatusBar style="dark" />
+                <AppContent />
+              </NavigationContainer>
+            </ToastProvider>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

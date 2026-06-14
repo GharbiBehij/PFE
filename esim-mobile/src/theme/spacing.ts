@@ -2,8 +2,11 @@ export const spacing = {
   0: 0,
   xxs: 2,
   xs: 4,
+  smMinus: 6,   // compact gap for inline card-button icons
   sm: 8,
+  btnPad: 11,   // inline card-button padding (design spec)
   md: 12,
+  mdPlus: 14,   // card inner padding (between md and lg)
   lg: 16,
   xl: 24,
   xxl: 32,
@@ -31,6 +34,8 @@ export const radii = {
   lg: 16,     // 🔥 PRIMARY radius (cards/buttons)
   xl: 24,
   xxl: 32,
+  authSheet: 36,
+  hero: 28,
   full: 9999,
 } as const;
 

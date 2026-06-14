@@ -5,9 +5,11 @@ import {
   ESIM_QUEUE,
   JOB_ACTIVATE_ESIM,
   JOB_PURCHASE_ESIM,
+  JOB_TOPUP_ESIM,
 } from '../Queue/esim.queue';
 import {
   ActivateJobData,
+  EsimTopupJobData,
   PurchaseJobData,
 } from '../Interfaces/Queue.interfaces';
 @Injectable()
@@ -17,10 +19,10 @@ export class EsimProducer {
   async enqueueActivation(data: ActivateJobData) {
     return this.queue.add(JOB_ACTIVATE_ESIM, data, {
       jobId: `activate-${data.transactionId}`,
-      attempts: 5,
+      attempts: 2,
       backoff: {
         type: 'exponential',
-        delay: 5000,
+        delay: 1000,
       },
       timeout: 30_000,
       removeOnComplete: true,
@@ -30,13 +32,21 @@ export class EsimProducer {
   async enqueuePurchase(data: PurchaseJobData) {
     return this.queue.add(JOB_PURCHASE_ESIM, data, {
       jobId: `purchase-${data.transactionId}`,
-      // Retry infra failures (RetryableError) up to 5 times with exponential backoff.
-      // TerminalError thrown by the worker stops retries immediately.
-      attempts: 5,
+      attempts: 2,
       backoff: {
         type: 'exponential',
-        delay: 5000,
+        delay: 1000,
       },
+      timeout: 30_000,
+      removeOnComplete: true,
+      removeOnFail: false,
+    } as any);
+  }
+  async enqueueTopup(data: EsimTopupJobData) {
+    return this.queue.add(JOB_TOPUP_ESIM, data, {
+      jobId: `topup-${data.transactionId}`,
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 1000 },
       timeout: 30_000,
       removeOnComplete: true,
       removeOnFail: false,

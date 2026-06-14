@@ -55,7 +55,7 @@ import { JOB_PURCHASE_ESIM } from '../src/Queue/Queue/esim.queue';
 // ── Dependency tokens / interfaces ─────────────────────────────────────────
 import { TransactionRepository } from '../src/transaction/transaction.repository';
 import { PaymentRepository } from '../src/payment/payment.repository';
-import { AuditLogService } from '../src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from '../src/AuditLog/AuditLog.service';
 import { EsimProducer } from '../src/Queue/Producer/esim.producer';
 import { PaymentEventProducer } from '../src/Queue/Producer/payment-event.producer';
 import { PAYMENT_GATEWAY_ADAPTER } from '../src/payment/adapters/payment-gateway.token';

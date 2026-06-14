@@ -29,13 +29,15 @@ export const colors = {
     600: '#CA8A04',
   },
   info: {
-  DEFAULT: '#3B82F6',
-  light: '#60A5FA',
-  dark: '#2563EB',
-  50: '#EFF6FF',
-  100: '#DBEAFE',
-  600: '#3B82F6',
-},
+    DEFAULT: '#3B82F6',
+    light: '#60A5FA',
+    dark: '#2563EB',
+    50: '#EFF6FF',
+    100: '#DBEAFE',
+    600: '#3B82F6',
+    800: '#1E40AF',  // blue-800, for instruction text on info backgrounds
+    900: '#1E3A8A',  // blue-900, for instruction headings on info backgrounds
+  },
 
   // Neutrals (Gray scale)
   gray: {
@@ -58,7 +60,10 @@ export const colors = {
     dark: '#059669',
     50: '#ECFDF5',
     100: '#D1FAE5',
+    400: '#4ade80',  // green-400 — halo glow + circle gradient start
+    500: '#22c55e',  // green-500 — status card gradient start
     600: '#10B981',
+    700: '#16a34a',  // green-700 — circle gradient end
   },
 
   error: {
@@ -74,6 +79,7 @@ export const colors = {
     DEFAULT: '#F59E0B',
     light: '#FBBF24',
     dark: '#D97706',
+    orange: '#F97316',  // orange-500, used in pending-status gradients
     50: '#FFFBEB',
     100: '#FEF3C7',
     600: '#F59E0B',
@@ -86,6 +92,9 @@ export const colors = {
   surfaceElevated: '#FFFFFF', // Elevated cards (same as surface for now)
   surfaceMuted: '#F3F4F6',    // Muted surface (gray-100)
   overlay: 'rgba(0, 0, 0, 0.5)', // Modals/sheets
+  overlayLight: 'rgba(0, 0, 0, 0.20)',
+  overlayProcessing: 'rgba(17, 17, 17, 0.55)',
+  overlayStrong: 'rgba(0, 0, 0, 0.88)',
 
   // Borders & Dividers
   border: '#E5E7EB',          // gray-200
@@ -113,7 +122,26 @@ export const colors = {
     primaryPressed: '#6D28D9',               // primary-700
     secondaryPressed: '#FBBF24',             // secondary dark
     surfacePressed: '#F3F4F6',               // gray-100
+    onPrimaryOverlay08: 'rgba(255, 255, 255, 0.08)',
+    onPrimaryOverlay12: 'rgba(255, 255, 255, 0.12)',
+    onPrimaryOverlay15: 'rgba(255, 255, 255, 0.15)',
+    onPrimaryOverlay18: 'rgba(255, 255, 255, 0.18)',
     onPrimaryOverlay20: 'rgba(255, 255, 255, 0.20)',
+    onPrimaryOverlay25: 'rgba(255, 255, 255, 0.25)',
+    onPrimaryOverlay28: 'rgba(255, 255, 255, 0.28)',
+    onPrimaryOverlay40: 'rgba(255, 255, 255, 0.40)',
+    onPrimaryOverlay50: 'rgba(255, 255, 255, 0.50)',
+    onPrimaryOverlay60: 'rgba(255, 255, 255, 0.60)',
+    onPrimaryOverlay70: 'rgba(255, 255, 255, 0.70)',
+    onPrimaryOverlay80: 'rgba(255, 255, 255, 0.80)',
+    onPrimaryOverlay85: 'rgba(255, 255, 255, 0.85)',
+    onPrimaryOverlay90: 'rgba(255, 255, 255, 0.90)',
+  },
+
+  gradient: {
+    authStart: '#5B21B6',
+    authMiddle: '#7C3AED',
+    authEnd: '#6D28D9',
   },
 
   // Semantic Status Colors
@@ -158,6 +186,18 @@ export const colors = {
       text: '#DC2626',       // error dark
       border: '#FEE2E2',     // error-100
     },
+  },
+
+  // Region gradient palettes — used exclusively by RegionCard
+  region: {
+    africa:      { start: '#F97316', end: '#C2410C' }, // warm orange
+    europe:      { start: '#3B82F6', end: '#1E40AF' }, // sky blue
+    middleEast:  { start: '#D97706', end: '#78350F' }, // desert amber
+    asiaPacific: { start: '#0D9488', end: '#134E4A' }, // Pacific teal
+    americas:    { start: '#059669', end: '#064E3B' }, // forest green
+    northAfrica: { start: '#E11D48', end: '#881337' }, // rose red
+    global:      { start: '#7C3AED', end: '#4C1D95' }, // brand purple
+    fallback:    { start: '#6B7280', end: '#374151' }, // neutral gray
   },
 
   // Special

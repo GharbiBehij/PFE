@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../../prisma/prisma.service';
+import { SupportRepository } from './support.repository';
 import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
 import { NotificationService } from '../notification/notification.service';
 
@@ -9,20 +9,22 @@ export class SupportService {
   private readonly logger = new Logger(SupportService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly supportRepository: SupportRepository,
     private readonly config: ConfigService,
     private readonly notificationService: NotificationService,
   ) {}
 
+  // ── Submit Support Ticket ─────────────────────────────────────────────────
+  // Sends a confirmation notification to the user and forwards the ticket
+  // to the internal support inbox via Postmark email.
   async submitTicket(dto: CreateSupportTicketDto, userId: number) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true, firstname: true, lastname: true },
-    });
+    const user = await this.supportRepository.findUserById(userId);
 
     this.logger.log(
       `[support] New ticket from userId=${userId} email=${user?.email} subject="${dto.subject}"`,
     );
+
+    // Notify user that their ticket was received
     this.notificationService
       .notifyUser(userId, 'support_received', {
         firstname: user?.firstname,
@@ -30,7 +32,8 @@ export class SupportService {
       })
       .catch(() => {});
 
-    const postmarkToken = this.config.get<string>('POSTMARK_API_TOKEN');
+    // Forward ticket to internal support inbox
+    const postmarkToken = this.config.get<string>('POSTMARK_SERVER_TOKEN');
     if (postmarkToken) {
       try {
         const response = await fetch('https://api.postmarkapp.com/email', {

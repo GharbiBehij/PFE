@@ -2,7 +2,19 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { TransactionRepository } from './transaction.repository';
 import { OfferService } from '../offer/offer.service';
-import { TransactionStatus } from '@prisma/client';
+import {
+  TransactionStatus,
+  TransactionType,
+  EsimStatus,
+  AuditLayer,
+  AuditTrigger,
+  SystemEvent,
+} from '@prisma/client';
+import { ForbiddenException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ClicToPayService } from '../payment/clictopay/clictopay.service';
+import { NotificationService } from '../notification/notification.service';
+import { AuditLogService } from '../AuditLog/AuditLog.service';
 
 export const TERMINAL_STATUSES = new Set<TransactionStatus>([
   TransactionStatus.FAILED,
@@ -43,7 +55,6 @@ const transitions: Record<string, TransactionStatus[]> = {
   ],
 
   SUCCEEDED: [],
-
   EXPIRED: [],
   COMPLETED: [],
   FAILED: [TransactionStatus.REFUNDED],
@@ -57,6 +68,9 @@ export class TransactionService {
   constructor(
     private readonly transactionRepository: TransactionRepository,
     private readonly offerService: OfferService,
+    private readonly clicToPayService: ClicToPayService,
+    private readonly notificationService: NotificationService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   private assertValidTransition(
@@ -109,9 +123,70 @@ export class TransactionService {
       amount: offer.price,
       currency: 'TND',
       channel: dto.channel,
+      type: TransactionType.PURCHASE,
       userId,
       status: TransactionStatus.PENDING,
     });
+  }
+
+  async requestRefund(transactionId: number, userId: number) {
+    const transaction =
+      await this.transactionRepository.findWithRelations(transactionId);
+    if (!transaction) throw new ForbiddenException('Transaction not found.');
+    if (transaction.userId !== userId) throw new ForbiddenException();
+    const esim = transaction.esim?.[0];
+    if (!esim || esim.status !== EsimStatus.NOT_ACTIVE) {
+      throw new ForbiddenException(
+        'eSIM has already been activated and cannot be refunded.',
+      );
+    }
+    const hoursSincePurchase =
+      (Date.now() - transaction.createdAt.getTime()) / 3_600_000;
+    if (hoursSincePurchase > 24) {
+      throw new ForbiddenException('Refund window has expired (24 hours).');
+    }
+    const payment = transaction.payment;
+    if (!payment?.gatewayPaymentId) {
+      throw new ForbiddenException('Payment reference is missing.');
+    }
+    const isToday =
+      new Date(payment.createdAt).toDateString() === new Date().toDateString();
+    if (isToday) {
+      await this.clicToPayService.reverseOrder(payment.gatewayPaymentId);
+    } else {
+      await this.clicToPayService.refundOrder(
+        payment.gatewayPaymentId,
+        transaction.amount,
+      );
+    }
+
+    // Atomically update payment, transaction, and eSIM statuses via repository
+    await this.transactionRepository.applyRefundStatuses(
+      payment.id,
+      transactionId,
+      esim.id,
+    );
+
+    // Transition transaction to REFUNDED and create refund record
+    await this.transactionRepository.createRefund(transactionId, userId);
+
+    await this.auditLogService.log({
+      layer: AuditLayer.PAYMENT,
+      event: SystemEvent.PAYMENT_REFUNDED,
+      userId,
+      transactionId,
+      fromStatus: 'FAILED',
+      toStatus: 'REFUNDED',
+      triggeredBy: AuditTrigger.USER,
+      message: `Refund processed for transaction ${transactionId}`,
+    });
+
+    await this.notificationService.send(userId, {
+      title: 'Refund processed',
+      body: `Your refund of ${transaction.amount} TND has been issued.`,
+    });
+
+    return { success: true };
   }
 
   async findOne(transactionId: number) {
@@ -175,6 +250,7 @@ export class TransactionService {
         id: e.id,
         status: e.status,
         qrCode: e.qrCode ?? null,
+        activationCode: e.activationCode ?? null,
       })),
     };
   }

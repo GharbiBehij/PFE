@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ScreenContent, ScreenHeader, ScreenShell } from '../../components/layout';
 import type { HomeStackParamList } from '../../navigation/types';
 import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
+import { PurpleButton } from '../../components/Buttons';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'EsimExpired'>;
 
@@ -29,12 +30,11 @@ export const EsimExpiredScreen = ({ navigation, route }: Props) => {
           <Text style={styles.subtitle}>Le délai de paiement a été dépassé.</Text>
           <Text style={styles.transaction}>Transaction: {transactionId}</Text>
 
-          <Pressable
+          <PurpleButton
+            label="Retour à l'accueil"
             onPress={openHomeTab}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
-          >
-            <Text style={styles.primaryButtonText}>Retour à l'accueil</Text>
-          </Pressable>
+            style={styles.primaryButton}
+          />
         </View>
       </ScreenContent>
     </ScreenShell>
@@ -85,14 +85,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   primaryButton: {
-    ...patterns.ctaPrimary,
     marginTop: spacing.xl,
-  },
-  primaryButtonPressed: {
-    ...patterns.ctaPrimaryPressed,
-  },
-  primaryButtonText: {
-    ...typography.labelMD,
-    color: colors.text.onPrimary,
   },
 });

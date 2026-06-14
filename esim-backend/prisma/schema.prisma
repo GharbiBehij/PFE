@@ -17,7 +17,6 @@ enum UserStatus {
 enum statusDomain {
   ESIM
   TRANSACTION
-  
 }
 
 enum Role {
@@ -51,6 +50,11 @@ enum TransactionStatus {
   AUTHORIZED
   EXPIRED
   REFUNDED
+}
+
+enum TransactionType {
+  PURCHASE
+  TOPUP
 }
 
 enum EsimStatus {
@@ -124,6 +128,7 @@ enum AuditLayer {
   ACTIVATION
   WALLET
   SYSTEM
+  TOP_UP
 }
 
 enum AuditTrigger {
@@ -167,6 +172,17 @@ enum SystemEvent {
   ACTIVATION_PROCESSING
   ACTIVATION_SUCCESS
   ACTIVATION_FAILED
+
+ // ── TOPUP ───────────────────────────────
+  TOP_UP_INITIATED
+  TOP_UP_PENDING_CASH
+  TOP_UP_PENDING_PAYMENT
+  TOP_UP_CASH_CONFIRMED
+  TOP_UP_PAYMENT_FAILED
+
+  // ── Realtime (Socket.IO) ─────────────────────
+  SOCKET_ESIM_ACTIVATED
+  SOCKET_TOPUP_SUCCESS
 
   // ── System ───────────────────────────────────
   RETRY_ATTEMPT
@@ -216,7 +232,7 @@ model Offer {
   popularity     String
   coverageType   CoverageType @default(LOCAL)
   networkType    String       @default("4G")
-  dataVolume     Int
+  dataVolume     Int?
   countryCode    String
   validityDays   Int
   price          Int
@@ -234,6 +250,7 @@ model Offer {
 model Transaction {
   id        Int                @id @default(autoincrement())
   status    TransactionStatus
+  type      TransactionType    @default(PURCHASE)
   channel   TransactionChannel
   amount    Int
   currency  String

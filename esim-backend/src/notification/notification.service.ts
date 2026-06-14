@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationRepository } from './notification.repository';
 
 type NotificationTemplate =
   | 'welcome'
@@ -32,25 +32,40 @@ export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly notificationRepository: NotificationRepository,
     private readonly config: ConfigService,
   ) {}
 
+  // ── Push Notification (raw payload) ──────────────────────────────────────
+  // Sends a push notification directly without templates.
+  // Used for quick inline alerts from other services.
+  async send(userId: number, payload: { title: string; body: string }) {
+    const pushToken =
+      await this.notificationRepository.findUserPushToken(userId);
+    if (!pushToken) return;
+    await fetch('https://exp.host/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: pushToken,
+        title: payload.title,
+        body: payload.body,
+        sound: 'default',
+      }),
+    });
+  }
+
+  // ── Templated Notification (email + push) ─────────────────────────────────
+  // Sends both an email (via Postmark) and a push notification (via Expo)
+  // using a pre-defined template. Silently skips missing users or tokens.
   async notifyUser(
     userId: number,
     template: NotificationTemplate,
     data: TemplateData = {},
   ): Promise<void> {
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          email: true,
-          firstname: true,
-          lastname: true,
-          pushToken: true,
-        },
-      });
+      const user =
+        await this.notificationRepository.findUserNotificationData(userId);
 
       if (!user) return;
 
@@ -73,31 +88,39 @@ export class NotificationService {
     }
   }
 
-  async sendPushOnly(userId: number, title: string, body: string): Promise<void> {
+  // ── Push-Only Notification ────────────────────────────────────────────────
+  // Sends only a push notification (no email). Used for lightweight alerts
+  // such as retry progress updates during eSIM activation.
+  async sendPushOnly(
+    userId: number,
+    title: string,
+    body: string,
+  ): Promise<void> {
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { pushToken: true },
-      });
-      if (!user?.pushToken) return;
-      await this.sendPush(user.pushToken, title, body);
+      const pushToken =
+        await this.notificationRepository.findUserPushToken(userId);
+      if (!pushToken) return;
+      await this.sendPush(pushToken, title, body);
     } catch (err) {
-      this.logger.error(`[notification] Push failed for userId=${userId}: ${err}`);
+      this.logger.error(
+        `[notification] Push failed for userId=${userId}: ${err}`,
+      );
     }
   }
 
+  // ── Private: Email Delivery ───────────────────────────────────────────────
   private async sendEmail(
     to: string,
     subject: string,
     htmlBody: string,
     textBody: string,
   ): Promise<void> {
-    const token = this.config.get<string>('POSTMARK_API_TOKEN');
+    const token = this.config.get<string>('POSTMARK_SERVER_TOKEN');
     const from = this.config.get<string>('POSTMARK_FROM', 'behijg@gmail.com');
 
     if (!token) {
       this.logger.warn(
-        '[notification] POSTMARK_API_TOKEN not set — skipping email',
+        '[notification] POSTMARK_SERVER_TOKEN not set — skipping email',
       );
       return;
     }
@@ -123,10 +146,13 @@ export class NotificationService {
       const error = await response.text();
       this.logger.error(`[notification] Postmark error: ${error}`);
     } else {
-      this.logger.log(`[notification] Email sent to ${to} — subject: ${subject}`);
+      this.logger.log(
+        `[notification] Email sent to ${to} — subject: ${subject}`,
+      );
     }
   }
 
+  // ── Private: Push Delivery ────────────────────────────────────────────────
   private async sendPush(
     pushToken: string,
     title: string,
@@ -148,12 +174,16 @@ export class NotificationService {
     });
 
     if (!response.ok) {
-      this.logger.error(`[notification] Expo push error for token=${pushToken}`);
+      this.logger.error(
+        `[notification] Expo push error for token=${pushToken}`,
+      );
     } else {
       this.logger.log(`[notification] Push sent to token=${pushToken}`);
     }
   }
 
+  // ── Private: Template Builder ─────────────────────────────────────────────
+  // Builds HTML and text email payloads for each notification template.
   private buildTemplate(
     template: NotificationTemplate,
     data: TemplateData,

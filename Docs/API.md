@@ -351,7 +351,7 @@ Purchase an eSIM offer (B2C flow).
 ```json
 {
   "offerId": 101,
-  "paymentMethod": "WALLET"
+  "paymentMethod": "CASH"
 }
 ```
 
@@ -364,8 +364,9 @@ Purchase an eSIM offer (B2C flow).
 ```json
 {
   "transactionId": 9001,
-  "status": "PENDING",
-  "message": "SUCCESS"
+  "status": "PENDING_PAYMENT",
+  "channel": "B2C",
+  "paymentUrl": "https://gateway.example.com/form"
 }
 ```
 
@@ -691,10 +692,12 @@ All error responses follow this shape:
 1. Client browses offers      GET /offers or GET /offers/search?q=...
 2. Client selects offer       GET /offers/:id
 3. Client initiates purchase  POST /transaction/purchase  { offerId, paymentMethod: "CASH" }
-                              → returns { transactionId, status: "PENDING" }
-4. Poll or navigate away      GET /transaction/:id  (check status)
-                              → PENDING → PROCESSING → SUCCEEDED
-5. On SUCCEEDED               GET /esims  (new eSIM appears in active list)
+                              → returns { transactionId, status: "PENDING_PAYMENT", paymentUrl }
+4. Client opens WebView       paymentUrl (ClicToPay) → redirect back to app
+5. Verify payment             POST /payment/verify  { orderId }
+6. Poll or navigate away      GET /transaction/:id  (check status)
+                              → PENDING_PAYMENT → PROCESSING → SUCCEEDED
+7. On SUCCEEDED               GET /esims  (new eSIM appears in active list)
 ```
 
 ## B2B2C Flow (SALESMAN + CUSTOMER roles)

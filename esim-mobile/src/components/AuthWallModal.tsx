@@ -4,44 +4,58 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OutlineButton, PurpleButton } from './Buttons';
 import { navigateTo } from '../navigation/navigationRef';
+import { colors, radii, shadows, sizes, spacing, typography } from '../theme';
 
 interface AuthWallModalProps {
   visible: boolean;
   onClose: () => void;
+  packageId?: string;
 }
 
-const YELLOW = '#FACC15';
-const PURPLE = '#7C3AED';
+export const AuthWallModal = ({ visible, onClose, packageId }: AuthWallModalProps) => {
+  const insets = useSafeAreaInsets();
 
-export const AuthWallModal = ({ visible, onClose }: AuthWallModalProps) => {
   const handleLogin = () => {
     onClose();
-    navigateTo('Login', { source: 'app' });
+    navigateTo('Login', { source: 'app', returnTo: 'Payment', packageId });
   };
 
   const handleRegister = () => {
     onClose();
-    navigateTo('Register', { source: 'app' });
+    navigateTo('Register', { source: 'app', returnTo: 'Payment', packageId });
   };
+
+  const bottomPad = Math.max(spacing.xxxl, insets.bottom + spacing.lg);
 
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
+      {/*
+        Les deux éléments sont en position absolute.
+        Le backdrop est rendu EN PREMIER  → z-index inférieur.
+        Le sheet    est rendu EN SECOND   → z-index supérieur, reçoit les touches.
+        Aucun conflit de layout flex, fonctionne sur iOS et Android.
+      */}
+
+      {/* Backdrop — couvre tout l'écran, ferme le modal au tap */}
       <Pressable style={styles.backdrop} onPress={onClose} />
 
-      <View style={styles.sheet}>
+      {/* Sheet — ancré en bas, toujours visible */}
+      <View style={[styles.sheet, { paddingBottom: bottomPad }]}>
         <View style={styles.handle} />
 
         <View style={styles.iconCircle}>
-          <Ionicons name="lock-closed" size={28} color={PURPLE} />
+          <Ionicons name="lock-closed" size={sizes.icon.lg} color={colors.primary.DEFAULT} />
         </View>
 
         <Text style={styles.title}>Connectez-vous pour continuer</Text>
@@ -50,29 +64,10 @@ export const AuthWallModal = ({ visible, onClose }: AuthWallModalProps) => {
           pour acheter votre eSIM.
         </Text>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={handleLogin}
-          style={styles.loginButton}
-        >
-          <Text style={styles.loginButtonText}>Se connecter</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={handleRegister}
-          style={styles.registerButton}
-        >
-          <Text style={styles.registerButtonText}>Créer un compte</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.75}
-          onPress={onClose}
-          style={styles.dismissButton}
-        >
-          <Text style={styles.dismissText}>Continuer à explorer</Text>
-        </TouchableOpacity>
+        <View style={styles.buttons}>
+          <PurpleButton label="Se connecter" onPress={handleLogin} />
+          <OutlineButton label="Créer un compte" onPress={handleRegister} />
+        </View>
       </View>
     </Modal>
   );
@@ -80,79 +75,54 @@ export const AuthWallModal = ({ visible, onClose }: AuthWallModalProps) => {
 
 const styles = StyleSheet.create({
   backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.overlay,
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 40,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radii.authSheet,
+    borderTopRightRadius: radii.authSheet,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
     alignItems: 'center',
+    ...shadows.high,
   },
   handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 2,
-    marginBottom: 24,
+    width: sizes.bottomSheet.handleWidth,
+    height: sizes.bottomSheet.handleHeight,
+    backgroundColor: colors.border,
+    borderRadius: radii.full,
+    marginBottom: spacing.xl,
   },
   iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#F3F0FF',
+    width: sizes.avatar.xl,
+    height: sizes.avatar.xl,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary[100],
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   title: {
-    color: '#1F2937',
-    fontSize: 20,
+    ...typography.titleMD,
+    color: colors.text.primary,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    color: '#6B7280',
-    fontSize: 14,
+    ...typography.bodyMD,
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 28,
+    marginBottom: spacing.xl,
   },
-  loginButton: {
-    backgroundColor: PURPLE,
-    borderRadius: 16,
-    paddingVertical: 16,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  loginButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  registerButton: {
-    backgroundColor: YELLOW,
-    borderRadius: 16,
-    paddingVertical: 16,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  registerButtonText: {
-    color: '#1C1917',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  dismissButton: {
-    paddingVertical: 8,
-  },
-  dismissText: {
-    color: '#9CA3AF',
-    fontSize: 14,
+  buttons: {
+    alignSelf: 'stretch',
+    gap: spacing.md,
   },
 });

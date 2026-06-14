@@ -12,9 +12,10 @@ import { UpdateEsimDto } from './dto/update-esim.dto';
 import { EsimResponseDto, EsimListResponseDto } from './dto/esim-response.dto';
 import { DestinationResponseDto } from './dto/destination-response.dto';
 import { EsimRepository } from './esim.repository';
-import { ProviderAdapter } from './interfaces/provider-adapter.interface';
+import { ProviderAdapter } from '../Adapters/provider-adapter.interface';
 import { PROVIDER_ADAPTER } from './adapters/provider-adapter.token';
 import { TransactionRepository } from 'src/transaction/transaction.repository';
+import { EsimGateway } from '../gateway/esim.gateway';
 import {
   EsimStatus,
   TransactionStatus,
@@ -25,7 +26,7 @@ import {
   Esim,
 } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
-import { AuditLogService } from '../ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from '../AuditLog/AuditLog.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const ESIM_TRANSITIONS: Record<EsimStatus, EsimStatus[]> = {
@@ -76,6 +77,7 @@ export class EsimService {
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
     private readonly config: ConfigService,
+    private readonly esimGateway: EsimGateway,
   ) {}
 
   async getDestinations() {
@@ -89,6 +91,7 @@ export class EsimService {
         where: { isDeleted: false },
         select: {
           country: true,
+          countryCode: true,
           coverageType: true,
           networkType: true,
           Region: true,
@@ -96,22 +99,33 @@ export class EsimService {
         },
       });
 
-      const localMap = new Map<string, {
-        country: string;
+      const localMap = new Map<
+        string,
+        {
+          country: string;
+          countryCode: string;
+          prices: number[];
+          count: number;
+          Region: string;
+          networkTypes: Set<string>;
+        }
+      >();
+
+      const regionalMap = new Map<
+        string,
+        {
+          region: string;
+          prices: number[];
+          count: number;
+          networkTypes: Set<string>;
+        }
+      >();
+
+      const globalAcc: {
         prices: number[];
         count: number;
-        Region: string;
         networkTypes: Set<string>;
-      }>();
-
-      const regionalMap = new Map<string, {
-        region: string;
-        prices: number[];
-        count: number;
-        networkTypes: Set<string>;
-      }>();
-
-      const globalAcc: { prices: number[]; count: number; networkTypes: Set<string> } = {
+      } = {
         prices: [],
         count: 0,
         networkTypes: new Set(),
@@ -124,6 +138,7 @@ export class EsimService {
           if (!localMap.has(offer.country)) {
             localMap.set(offer.country, {
               country: offer.country,
+              countryCode: offer.countryCode,
               prices: [],
               count: 0,
               Region: offer.Region,
@@ -161,7 +176,7 @@ export class EsimService {
       const local = Array.from(localMap.values()).map((entry) => ({
         id: entry.country,
         country: entry.country,
-        countryCode: '',
+        countryCode: entry.countryCode,
         coverageType: 'LOCAL' as const,
         startingPrice: Math.min(...entry.prices),
         offerCount: entry.count,
@@ -170,11 +185,11 @@ export class EsimService {
       }));
 
       const regionCodeMap: Record<string, string> = {
-        'Europe':        'eu',
-        'Asia':          'jp',
-        'Middle East':   'ae',
+        Europe: 'eu',
+        Asia: 'jp',
+        'Middle East': 'ae',
         'North America': 'us',
-        'Oceania':       'au',
+        Oceania: 'au',
       };
 
       const regional = Array.from(regionalMap.values()).map((entry) => ({
@@ -188,18 +203,21 @@ export class EsimService {
         Region: entry.region,
       }));
 
-      const global = globalAcc.count > 0
-        ? [{
-            id: 'mondial',
-            country: 'Mondial',
-            countryCode: 'world',
-            coverageType: 'GLOBAL' as const,
-            startingPrice: Math.min(...globalAcc.prices),
-            offerCount: globalAcc.count,
-            networkType: pickBestNetwork(globalAcc.networkTypes),
-            Region: 'Global',
-          }]
-        : [];
+      const global =
+        globalAcc.count > 0
+          ? [
+              {
+                id: 'mondial',
+                country: 'Mondial',
+                countryCode: 'world',
+                coverageType: 'GLOBAL' as const,
+                startingPrice: Math.min(...globalAcc.prices),
+                offerCount: globalAcc.count,
+                networkType: pickBestNetwork(globalAcc.networkTypes),
+                Region: 'Global',
+              },
+            ]
+          : [];
 
       return [...local, ...regional, ...global];
     } catch (error: unknown) {
@@ -288,6 +306,10 @@ export class EsimService {
       .filter((e) => e.status === EsimStatus.ACTIVE)
       .map((e) => this.toResponseDto(e));
 
+    const pending = esims
+      .filter((e) => e.status === EsimStatus.NOT_ACTIVE)
+      .map((e) => this.toResponseDto(e));
+
     const expired = esims
       .filter(
         (e) =>
@@ -295,7 +317,7 @@ export class EsimService {
       )
       .map((e) => this.toResponseDto(e));
 
-    return { active, expired };
+    return { active, pending, expired };
   }
 
   async getEsimById(userId: number, esimId: number): Promise<EsimResponseDto> {
@@ -326,7 +348,11 @@ export class EsimService {
       esim.dataTotal ?? 0,
     );
 
-    return this.esimRepository.updateUsage(esimId, newDataUsed);
+    const updated = await this.esimRepository.updateUsage(esimId, newDataUsed);
+
+    // Notifie le client en temps réel si l'app est ouverte
+    this.esimGateway.emitUsageUpdated(esim.userId, updated);
+    return updated;
   }
 
   async markPending(id: number) {
@@ -401,7 +427,6 @@ export class EsimService {
         const [locked] = await tx.$queryRaw<any[]>`
           SELECT * FROM "Esim" WHERE id = ${esimId} FOR UPDATE
         `;
-
         if (!locked) {
           throw new NotFoundException(`eSIM ${esimId} not found`);
         }
@@ -418,7 +443,6 @@ export class EsimService {
             `eSIM ${esimId} is deleted and cannot be transitioned`,
           );
         }
-
         try {
           assertValidEsimTransition(currentStatus, targetStatus, esimId);
         } catch (error) {

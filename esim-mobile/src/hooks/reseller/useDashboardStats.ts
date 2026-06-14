@@ -16,6 +16,12 @@ const formatDelta = (current: number, previous: number) => {
   return delta >= 0 ? `+${delta}` : String(delta);
 };
 
+const formatPercentDelta = (current: number, previous: number): string => {
+  if (previous === 0) return '--';
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return pct >= 0 ? `+${pct}%` : `${pct}%`;
+};
+
 export const useDashboardStats = () => {
   return useQuery({
     queryKey: ['reseller', 'dashboardStats'],
@@ -86,12 +92,38 @@ export const useDashboardStats = () => {
         .filter((t) => new Date(t.createdAt) >= todayStart)
         .reduce((sum, t) => sum + t.amount * COMMISSION_RATE, 0);
 
+      const yesterdayCommission = completedTransactions
+        .filter((t) => {
+          const date = new Date(t.createdAt);
+          return date >= yesterdayStart && date < todayStart;
+        })
+        .reduce((sum, t) => sum + t.amount * COMMISSION_RATE, 0);
+
       const weekCommission = completedTransactions
         .filter((t) => new Date(t.createdAt) >= thisWeekStart)
         .reduce((sum, t) => sum + t.amount * COMMISSION_RATE, 0);
 
+      const previousWeekCommission = completedTransactions
+        .filter((t) => {
+          const date = new Date(t.createdAt);
+          return date >= previousWeekStart && date < thisWeekStart;
+        })
+        .reduce((sum, t) => sum + t.amount * COMMISSION_RATE, 0);
+
       const monthCommission = completedTransactions
         .filter((t) => new Date(t.createdAt) >= thisMonthStart)
+        .reduce((sum, t) => sum + t.amount * COMMISSION_RATE, 0);
+
+      const previousMonthSales = completedTransactions.filter((t) => {
+        const date = new Date(t.createdAt);
+        return date >= previousMonthStart && date < thisMonthStart;
+      }).length;
+
+      const previousMonthCommission = completedTransactions
+        .filter((t) => {
+          const date = new Date(t.createdAt);
+          return date >= previousMonthStart && date < thisMonthStart;
+        })
         .reduce((sum, t) => sum + t.amount * COMMISSION_RATE, 0);
 
       return {
@@ -106,6 +138,12 @@ export const useDashboardStats = () => {
         todayCommission,
         weekCommission,
         monthCommission,
+        todaySalesRate: formatPercentDelta(todaySales, yesterdaySales),
+        thisWeekSalesRate: formatPercentDelta(thisWeekSales, previousWeekSales),
+        monthSalesRate: formatPercentDelta(thisMonthSales, previousMonthSales),
+        todayCommissionRate: formatPercentDelta(todayCommission, yesterdayCommission),
+        thisWeekCommissionRate: formatPercentDelta(weekCommission, previousWeekCommission),
+        monthCommissionRate: formatPercentDelta(monthCommission, previousMonthCommission),
       } satisfies DashboardStats;
     },
   });

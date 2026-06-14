@@ -2,8 +2,8 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type AuthStackParamList = {
   Onboarding: { skipAnimation?: boolean } | undefined;
-  Login: { source?: 'onboarding' | 'app' } | undefined;
-  Register: { source?: 'onboarding' | 'app' } | undefined;
+  Login: { source?: 'onboarding' | 'app'; returnTo?: string; packageId?: string } | undefined;
+  Register: { source?: 'onboarding' | 'app'; returnTo?: string; packageId?: string } | undefined;
   ResellerLogin: undefined;
 };
 
@@ -22,12 +22,23 @@ export type HomeStackParamList = {
   };
   Payment: {
     packageId: string;
+    mode?: 'purchase' | 'topup';
+    esimId?: string;
+    offerId?: number;
   };
   PaymentWebView: {
     paymentUrl: string;
     transactionId: number;
+    mode?: 'purchase' | 'topup';
+    esimId?: string;
   };
   ProcessingModal: {
+    transactionId: number;
+    channel: 'B2C' | 'B2B2C';
+    mode?: 'purchase' | 'topup';
+    esimId?: string;
+  };
+  PaymentSuccess: {
     transactionId: number;
     channel: 'B2C' | 'B2B2C';
   };
@@ -45,9 +56,22 @@ export type HomeStackParamList = {
 };
 
 export type EsimsStackParamList = {
-  MyEsims: undefined;
+  MyEsims: { initialTab?: 'ACTIVE' | 'PENDING' | 'HISTORY' } | undefined;
   GuestEsims: undefined;
+  EsimConsumption: {
+    esimId: string;
+  };
   EsimDetail: {
+    esimId: string;
+  };
+  TopupPackage: {
+    esimId: string;
+    country: string;
+    countryCode: string;
+    coverageType: 'LOCAL' | 'REGIONAL';
+    region?: string;
+  };
+  TopupSuccess: {
     esimId: string;
   };
 };
@@ -60,6 +84,20 @@ export type ProfileStackParamList = {
   HelpCenter: undefined;
   Wallet: undefined;
   TopUp: undefined;
+};
+
+export type OffersStackParamList = {
+  Destinations: undefined;
+  Search: undefined;
+  PackageListing: HomeStackParamList['PackageListing'];
+  PackageDetail: HomeStackParamList['PackageDetail'];
+  Payment: HomeStackParamList['Payment'];
+  PaymentWebView: HomeStackParamList['PaymentWebView'];
+  ProcessingModal: HomeStackParamList['ProcessingModal'];
+  PaymentSuccess: HomeStackParamList['PaymentSuccess'];
+  EsimSuccess: HomeStackParamList['EsimSuccess'];
+  EsimFailed: HomeStackParamList['EsimFailed'];
+  EsimExpired: HomeStackParamList['EsimExpired'];
 };
 
 export type MainTabsParamList = {
@@ -79,10 +117,30 @@ export type ResellerDashboardStackParamList = {
     amount: string;
     purchaseDate: string;
   };
+  DeferredActivationSuccess: {
+    transactionId: number;
+    customerName: string;
+    customerPhone: string;
+    country: string;
+    offerTitle: string;
+    amount: number;
+    activateNow: boolean;
+    activationCode?: string;
+  };
 };
 
 export type ResellerSellStackParamList = {
   Sell: undefined;
+  B2BSellSuccess: {
+    transactionId: number;
+    customerName: string;
+    customerPhone: string;
+    country: string;
+    offerTitle: string;
+    amount: number;
+    activateNow: boolean;
+    activationCode?: string;
+  };
 };
 
 export type ResellerTransactionsStackParamList = {

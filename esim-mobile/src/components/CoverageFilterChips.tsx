@@ -7,7 +7,7 @@ export type CoverageFilter = 'LOCAL' | 'REGIONAL' | 'GLOBAL' | 'POPULAR';
 const options: Array<{ icon: keyof typeof Ionicons.glyphMap; key: CoverageFilter; label: string }> = [
   { icon: 'location', key: 'LOCAL', label: 'Locale' },
   { icon: 'earth', key: 'REGIONAL', label: 'Régional' },
-  { icon: 'language', key: 'GLOBAL', label: 'Mondial' },
+  { icon: 'earth-outline', key: 'GLOBAL', label: 'Mondial' },
   { icon: 'trending-up', key: 'POPULAR', label: 'Populaire' },
 ] as const;
 

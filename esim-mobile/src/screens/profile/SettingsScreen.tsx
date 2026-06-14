@@ -9,11 +9,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { PurpleButton } from '../../components/Buttons';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { ScreenContent, ScreenHeader, ScreenShell, Section } from '../../components/layout';
 import { useChangePassword } from '../../hooks/client/useProfile';
 import type { ProfileStackParamList } from '../../navigation/types';
-import { colors, patterns, radii, shadows, sizes, spacing, typography } from '../../theme';
+import { colors, patterns, radii, sizes, spacing, typography } from '../../theme';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'Settings'>;
 
@@ -26,15 +27,9 @@ export const SettingsScreen = ({ navigation }: Props) => {
   const [errors, setErrors] = useState({ currentPassword: '', newPassword: '' });
 
   const onSubmit = async () => {
-    if (!currentPassword || !newPassword) {
-      return;
-    }
-
+    if (!currentPassword || !newPassword) return;
     try {
-      await changePasswordMutation.mutateAsync({
-        currentPassword,
-        newPassword,
-      });
+      await changePasswordMutation.mutateAsync({ currentPassword, newPassword });
       setSuccess('Mot de passe modifié avec succès.');
       setCurrentPassword('');
       setNewPassword('');
@@ -52,7 +47,10 @@ export const SettingsScreen = ({ navigation }: Props) => {
             accessibilityLabel="Retour au profil"
             accessibilityRole="button"
             onPress={() => navigation.navigate('Profile')}
-            style={({ pressed }) => [styles.headerBackButton, pressed ? styles.headerBackButtonPressed : undefined]}
+            style={({ pressed }) => [
+              styles.headerBackButton,
+              pressed ? styles.headerBackButtonPressed : undefined,
+            ]}
           >
             <Ionicons color={colors.text.primary} name="arrow-back" size={sizes.icon.md} />
           </Pressable>
@@ -67,6 +65,7 @@ export const SettingsScreen = ({ navigation }: Props) => {
 
       <ScreenContent contentContainerStyle={styles.contentContainer}>
         <Section>
+          {/* ── Security card ── */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Sécurité du compte</Text>
 
@@ -86,37 +85,39 @@ export const SettingsScreen = ({ navigation }: Props) => {
               value={newPassword}
             />
 
-            {changePasswordMutation.isError ? <ErrorBanner message="Impossible de changer le mot de passe." /> : null}
+            {changePasswordMutation.isError ? (
+              <ErrorBanner message="Impossible de changer le mot de passe." />
+            ) : null}
             {success ? <Text style={styles.successText}>{success}</Text> : null}
-            {errors.currentPassword ? <Text style={styles.errorText}>{errors.currentPassword}</Text> : null}
-            {errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
+            {errors.currentPassword ? (
+              <Text style={styles.errorText}>{errors.currentPassword}</Text>
+            ) : null}
+            {errors.newPassword ? (
+              <Text style={styles.errorText}>{errors.newPassword}</Text>
+            ) : null}
+          </View>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Mettre à jour le mot de passe"
-              accessibilityState={{ disabled: changePasswordMutation.isPending }}
+          {/* ── Submit button — outside card ── */}
+          <View style={styles.submitButtonCard}>
+            <PurpleButton
               disabled={changePasswordMutation.isPending}
+              icon="checkmark-outline"
+              label={changePasswordMutation.isPending ? 'Mise à jour...' : 'Mettre à jour'}
               onPress={onSubmit}
-              style={({ pressed }) => [
-                styles.submitButton,
-                pressed ? styles.submitButtonPressed : undefined,
-                changePasswordMutation.isPending ? styles.submitButtonDisabled : undefined,
-              ]}
-            >
-              <Text style={styles.submitButtonText}>
-                {changePasswordMutation.isPending ? 'Mise à jour...' : 'Mettre à jour le mot de passe'}
-              </Text>
-            </Pressable>
+            />
           </View>
         </Section>
 
         <Section>
+          {/* ── Preferences card ── */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Préférences</Text>
             <View style={styles.preferenceRow}>
               <View>
                 <Text style={styles.preferenceTitle}>Notifications push</Text>
-                <Text style={styles.preferenceSubtitle}>Recevoir les mises à jour de consommation</Text>
+                <Text style={styles.preferenceSubtitle}>
+                  Recevoir les mises à jour de consommation
+                </Text>
               </View>
               <Switch
                 onValueChange={setNotificationsEnabled}
@@ -206,20 +207,17 @@ const styles = StyleSheet.create({
     color: colors.error.DEFAULT,
     marginTop: spacing.xs,
   },
-  submitButton: {
-    ...patterns.ctaPrimary,
+
+  // ── Submit button ──
+  submitButtonCard: {
+    ...patterns.card,
+    alignItems: 'center',
     marginTop: spacing.xl,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
-  submitButtonPressed: {
-    ...patterns.ctaPrimaryPressed,
-  },
-  submitButtonDisabled: {
-    ...patterns.ctaPrimaryDisabled,
-  },
-  submitButtonText: {
-    ...typography.labelMD,
-    color: colors.text.onPrimary,
-  },
+
+  // ── Preferences ──
   preferenceRow: {
     alignItems: 'center',
     flexDirection: 'row',

@@ -1,66 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-
-export interface ClicToPayRegisterParams {
-  orderNumber: string;
-  amount: number;
-  currency?: number;
-  returnUrl: string;
-  failUrl?: string;
-  language?: string;
-  pageView?: string;
-  description?: string;
-  email?: string;
-  sessionTimeoutSecs?: number;
-}
-
-export interface ClicToPayRegisterResponse {
-  orderId?: string;
-  formUrl?: string;
-  errorCode?: number;
-  errorMessage?: string;
-}
-
-export interface ClicToPayOrderStatus {
-  OrderStatus: number;
-  ErrorCode: string;
-  ErrorMessage: string;
-  OrderNumber: string;
-  Pan?: string;
-  Amount: number;
-  currency?: string;
-  approvalCode?: string;
-  cardholderName?: string;
-  ip?: string;
-  expiration?: string;
-}
-
-export interface ClicToPayExtendedStatus extends ClicToPayOrderStatus {
-  orderStatus: number;
-  actionCode: number;
-  actionCodeDescription: string;
-  date: number;
-  orderDescription?: string;
-  cardAuthInfo?: {
-    pan?: string;
-    expiration?: string;
-    cardholderName?: string;
-    approvalCode?: string;
-    secureAuthInfo?: {
-      eci?: number;
-      threeDSInfo?: {
-        cavv?: string;
-        xid?: string;
-      };
-    };
-  };
-}
-
-export interface ClicToPayErrorResponse {
-  errorCode: number | string;
-  errorMessage: string;
-}
+import {
+  ClicToPayRegisterParams,
+  ClicToPayRegisterResponse,
+  ClicToPayOrderStatus,
+  ClicToPayExtendedStatus,
+  ClicToPayErrorResponse,
+} from '../interfaces/clictopay.interfaces';
+import * as https from 'https';
 
 @Injectable()
 export class ClicToPayService {
@@ -72,15 +20,32 @@ export class ClicToPayService {
   private readonly defaultFailUrl: string;
   private readonly httpsAgent: any;
 
-constructor(private readonly config: ConfigService) {
-  this.baseUrl = this.config.getOrThrow<string>('CLICTOPAY_BASE_URL');
-  this.userName = this.config.getOrThrow<string>('CLICTOPAY_USERNAME');
-  this.password = this.config.getOrThrow<string>('CLICTOPAY_PASSWORD');
-  this.defaultReturnUrl = this.config.get<string>('CLICTOPAY_SUCCESS_URL', ''); // ← add
-  this.defaultFailUrl = this.config.get<string>('CLICTOPAY_FAIL_URL', '');
-}
+  constructor(private readonly config: ConfigService) {
+    this.baseUrl = this.config.getOrThrow<string>('CLICTOPAY_BASE_URL');
+    this.userName = this.config.getOrThrow<string>('CLICTOPAY_USERNAME');
+    this.password = this.config.getOrThrow<string>('CLICTOPAY_PASSWORD');
+    this.defaultReturnUrl = this.config.get<string>(
+      'CLICTOPAY_SUCCESS_URL',
+      '',
+    );
+    this.defaultFailUrl = this.config.get<string>('CLICTOPAY_FAIL_URL', '');
+    this.httpsAgent = new https.Agent({ rejectUnauthorized: false });
+  }
 
-  async registerOrder(params: ClicToPayRegisterParams): Promise<ClicToPayRegisterResponse> {
+  async registerOrder(
+    params: ClicToPayRegisterParams,
+  ): Promise<ClicToPayRegisterResponse> {
+    if (this.config.get('PROVIDER_TYPE') === 'mock') {
+      const orderId = `mock-${Date.now()}`;
+      const backendUrl = this.config.get('BACKEND_URL', 'http://localhost:3000');
+      const returnUrl = params.returnUrl || this.defaultReturnUrl;
+      const failUrl = params.failUrl || this.defaultFailUrl;
+      return {
+        orderId,
+        formUrl: `${backendUrl}/payment/mock/pay?orderId=${orderId}&returnUrl=${encodeURIComponent(returnUrl)}&failUrl=${encodeURIComponent(failUrl)}`,
+      } as ClicToPayRegisterResponse;
+    }
+
     const body = new URLSearchParams();
     body.append('userName', this.userName);
     body.append('password', this.password);
@@ -97,20 +62,36 @@ constructor(private readonly config: ConfigService) {
     if (params.sessionTimeoutSecs) {
       body.append('sessionTimeoutSecs', String(params.sessionTimeoutSecs));
     }
+    // notificationUrl is passed as a top-level param (Sberbank REST v2 format).
+    if (params.notificationUrl) {
+      body.append('notificationUrl', params.notificationUrl);
+    }
+    // jsonParams carries email pre-fill for the payment form.
     if (params.email) {
       body.append('jsonParams', JSON.stringify({ email: params.email }));
     }
 
-    const url = `${this.baseUrl}/payment/rest/register.do`;
-    this.logger.log(`Registering order: ${params.orderNumber}, amount: ${params.amount} millimes`);
-    this.logger.log(`[DEBUG] returnUrl = "${params.returnUrl || this.defaultReturnUrl}"`);
+    const url = `${this.baseUrl}/epg/rest/register.do`;
+    this.logger.log(
+      `Registering order: ${params.orderNumber}, amount: ${params.amount} millimes`,
+    );
+    this.logger.log(
+      `[DEBUG] returnUrl = "${params.returnUrl || this.defaultReturnUrl}"`,
+    );
     this.logger.log(`[DEBUG] defaultReturnUrl = "${this.defaultReturnUrl}"`);
-    this.logger.log(`[DEBUG] CLICTOPAY_SUCCESS_URL env = "${this.config.get('CLICTOPAY_SUCCESS_URL')}"`);
-    const response = await axios.post<ClicToPayRegisterResponse>(url, body.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 30000,
-      httpsAgent: this.httpsAgent,
-    });
+    this.logger.log(
+      `[DEBUG] CLICTOPAY_SUCCESS_URL env = "${this.config.get('CLICTOPAY_SUCCESS_URL')}"`,
+    );
+
+    const response = await axios.post<ClicToPayRegisterResponse>(
+      url,
+      body.toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 30000,
+        httpsAgent: this.httpsAgent,
+      },
+    );
 
     const data = response.data;
 
@@ -125,77 +106,128 @@ constructor(private readonly config: ConfigService) {
     return data;
   }
 
-  async getOrderStatus(orderId: string, language = 'fr'): Promise<ClicToPayOrderStatus> {
+  async getOrderStatus(
+    orderId: string,
+    language = 'fr',
+  ): Promise<ClicToPayOrderStatus> {
+    if (orderId.startsWith('mock-')) {
+      this.logger.log(`Mock order status: orderId=${orderId} → DEPOSITED`);
+      return { OrderStatus: 2, ErrorCode: 0, Amount: 0, Currency: 788 } as unknown as ClicToPayOrderStatus;
+    }
+
+    this.logger.log(`Fetching order status: orderId=${orderId}`);
     const body = new URLSearchParams();
     body.append('userName', this.userName);
     body.append('password', this.password);
     body.append('orderId', orderId);
     body.append('language', language);
 
-    const url = `${this.baseUrl}/payment/rest/getOrderStatus.do`;
-    const response = await axios.post<ClicToPayOrderStatus>(url, body.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000,
-      httpsAgent: this.httpsAgent,
-    });
+    const url = `${this.baseUrl}/epg/rest/getOrderStatus.do`;
+    const response = await axios.post<ClicToPayOrderStatus>(
+      url,
+      body.toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000,
+        httpsAgent: this.httpsAgent,
+      },
+    );
 
-    return response.data;
+    const data = response.data;
+    this.logger.log(
+      `Order status: orderId=${orderId} status=${data.OrderStatus} errorCode=${data.ErrorCode}`,
+    );
+    return data;
   }
 
-  async getOrderStatusExtended(orderId: string, language = 'fr'): Promise<ClicToPayExtendedStatus> {
+  async getOrderStatusExtended(
+    orderId: string,
+    language = 'fr',
+  ): Promise<ClicToPayExtendedStatus> {
+    this.logger.log(`Fetching extended order status: orderId=${orderId}`);
     const body = new URLSearchParams();
     body.append('userName', this.userName);
     body.append('password', this.password);
     body.append('orderId', orderId);
     body.append('language', language);
 
-    const url = `${this.baseUrl}/payment/rest/getOrderStatusExtended.do`;
-    const response = await axios.post<ClicToPayExtendedStatus>(url, body.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000,
-      httpsAgent: this.httpsAgent,
-    });
+    const url = `${this.baseUrl}/epg/rest/getOrderStatusExtended.do`;
+    this.logger.log(`Calling URL: ${url}`);
+    const response = await axios.post<ClicToPayExtendedStatus>(
+      url,
+      body.toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000,
+        httpsAgent: this.httpsAgent,
+      },
+    );
 
-    return response.data;
+    const data = response.data;
+    this.logger.log(
+      `Extended order status: orderId=${orderId} status=${data.OrderStatus} actionCode=${data.actionCode}`,
+    );
+    return data;
   }
 
-  async reverseOrder(orderId: string, language = 'fr'): Promise<ClicToPayErrorResponse> {
+  async reverseOrder(
+    orderId: string,
+    language = 'fr',
+  ): Promise<ClicToPayErrorResponse> {
     const body = new URLSearchParams();
     body.append('userName', this.userName);
     body.append('password', this.password);
     body.append('orderId', orderId);
     body.append('language', language);
 
-    const url = `${this.baseUrl}/payment/rest/reverse.do`;
+    const url = `${this.baseUrl}/epg/rest/reverse.do`;
+    this.logger.log(`Calling URL: ${url}`);
     this.logger.log(`Reversing order: ${orderId}`);
 
-    const response = await axios.post<ClicToPayErrorResponse>(url, body.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000,
-      httpsAgent: this.httpsAgent,
+    const response = await axios.post<ClicToPayErrorResponse>(
+      url,
+      body.toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000,
+        httpsAgent: this.httpsAgent,
+      },
+    );
 
-    });
-
-    return response.data;
+    const data = response.data;
+    this.logger.log(
+      `Reverse result: orderId=${orderId} errorCode=${data.errorCode}`,
+    );
+    return data;
   }
 
-  async refundOrder(orderId: string, amount: number): Promise<ClicToPayErrorResponse> {
+  async refundOrder(
+    orderId: string,
+    amount: number,
+  ): Promise<ClicToPayErrorResponse> {
     const body = new URLSearchParams();
     body.append('userName', this.userName);
     body.append('password', this.password);
     body.append('orderId', orderId);
     body.append('amount', String(amount));
 
-    const url = `${this.baseUrl}/payment/rest/refund.do`;
+    const url = `${this.baseUrl}/epg/rest/refund.do`;
     this.logger.log(`Refunding order: ${orderId}, amount: ${amount} millimes`);
 
-    const response = await axios.post<ClicToPayErrorResponse>(url, body.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000,
-      httpsAgent: this.httpsAgent,
+    const response = await axios.post<ClicToPayErrorResponse>(
+      url,
+      body.toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000,
+        httpsAgent: this.httpsAgent,
+      },
+    );
 
-    });
-
-    return response.data;
+    const data = response.data;
+    this.logger.log(
+      `Refund result: orderId=${orderId} errorCode=${data.errorCode}`,
+    );
+    return data;
   }
 }

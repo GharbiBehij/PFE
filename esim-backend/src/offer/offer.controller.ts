@@ -56,7 +56,9 @@ export class OfferController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all offers or filter by country, region, or coverageType' })
+  @ApiOperation({
+    summary: 'List all offers or filter by country, region, or coverageType',
+  })
   @ApiQuery({ name: 'country', required: false, example: 'France' })
   @ApiQuery({ name: 'region', required: false, example: 'Europe' })
   @ApiQuery({ name: 'coverageType', required: false, example: 'REGIONAL' })

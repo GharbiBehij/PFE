@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
-import { TransactionStatus, Prisma } from '@prisma/client';
+import { TransactionStatus, EsimStatus, Prisma } from '@prisma/client';
 import { AuditLayer, SystemEvent } from '@prisma/client';
 
 @Injectable()
@@ -45,6 +45,13 @@ export class TransactionRepository {
     });
   }
 
+  async findWithRelations(transactionId: number) {
+    return this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: { esim: true, payment: true },
+    });
+  }
+
   async findLatestAuditContext(transactionId: number): Promise<{
     attemptNumber: number | null;
     durationMs: number | null;
@@ -62,5 +69,33 @@ export class TransactionRepository {
       },
     });
     return row ?? null;
+  }
+
+  // Atomically updates payment, transaction, and eSIM statuses for a refund.
+  // Uses a Prisma $transaction to ensure all-or-nothing consistency.
+  async applyRefundStatuses(
+    paymentId: number,
+    transactionId: number,
+    esimId: number,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.payment.update({
+        where: { id: paymentId },
+        data: { status: 'FAILED' },
+      }),
+      this.prisma.transaction.update({
+        where: { id: transactionId },
+        data: { status: TransactionStatus.FAILED },
+      }),
+      this.prisma.esim.update({
+        where: { id: esimId },
+        data: { status: EsimStatus.DELETED },
+      }),
+    ]);
+  }
+
+  // Creates a refund record and transitions the transaction to REFUNDED status.
+  async createRefund(transactionId: number, userId: number): Promise<void> {
+    await this.updateStatus(transactionId, TransactionStatus.REFUNDED);
   }
 }

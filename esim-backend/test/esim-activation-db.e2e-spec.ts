@@ -3,15 +3,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { EsimService } from '../src/esim/esim.service';
-import { AuditLogService } from '../src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from '../src/AuditLog/AuditLog.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EsimRepository } from '../src/esim/esim.repository';
 import { PROVIDER_ADAPTER } from '../src/esim/adapters/provider-adapter.token';
 import { TransactionRepository } from '../src/transaction/transaction.repository';
 import { EsimProducer } from '../src/Queue/Producer/esim.producer';
 
-const TEST_DATABASE_URL =
-  'postgresql://test:test@localhost:5433/netyfly_test';
+const TEST_DATABASE_URL = 'postgresql://test:test@localhost:5433/netyfly_test';
 
 // Suppress NestJS logger output globally so intentional error-path tests stay clean
 beforeAll(() => {
@@ -251,12 +250,8 @@ describe('DB locking — SELECT FOR UPDATE', () => {
     );
 
     const results = await Promise.allSettled(tasks);
-    const fulfilled = results.filter(
-      (result) => result.status === 'fulfilled',
-    );
-    const rejected = results.filter(
-      (result) => result.status === 'rejected',
-    );
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter((result) => result.status === 'rejected');
 
     expect(fulfilled.length + rejected.length).toBe(25);
 
@@ -562,9 +557,7 @@ describe('DB transactions — rollback on failure', () => {
     const esimId = await seedEsim({ status: EsimStatus.NOT_ACTIVE });
     const { esimService, auditLog } = await buildModule();
 
-    auditLog.log.mockRejectedValue(
-      new Error('AuditLog service unavailable'),
-    );
+    auditLog.log.mockRejectedValue(new Error('AuditLog service unavailable'));
 
     try {
       await esimService.requestActivation(esimId, {

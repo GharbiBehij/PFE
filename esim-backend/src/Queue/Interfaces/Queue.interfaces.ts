@@ -1,4 +1,4 @@
-type PaymentMethod = 'WALLET' | 'CASH';
+type PaymentMethod = 'WALLET' | 'CASH' | 'CARD';
 type Channel = 'B2C' | 'B2B2C';
 
 export interface PurchaseJobData {
@@ -9,6 +9,10 @@ export interface PurchaseJobData {
   amount: number;
   currency: string;
   paymentMethod?: PaymentMethod;
+  /** When true, enqueue activate-esim after purchase-esim completes */
+  chainActivation?: boolean;
+  /** B2B2C only — when false, skip COMPLETED transition after provisioning so reseller can activate later */
+  activateNow?: boolean;
 }
 
 export interface ActivateJobData {
@@ -16,6 +20,12 @@ export interface ActivateJobData {
   userId: number;
   iccid: string;
   channel: Channel;
+}
+export interface EsimTopupJobData {
+  transactionId: number;
+  userId: number;
+  esimId: number;
+  offerId: number;
 }
 export interface PaymentEventJobData {
   gatewayPaymentId: string;

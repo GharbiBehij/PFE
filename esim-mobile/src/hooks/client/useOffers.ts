@@ -26,6 +26,8 @@ export const useOffersByCountry = (country: string, coverageType?: 'LOCAL' | 'RE
       return offersApi.getOffers(country);
     },
     enabled: country.trim().length > 0,
+    staleTime : 1000 * 60 * 5
+   
   });
 
 export const useOfferDetail = (id: string) =>

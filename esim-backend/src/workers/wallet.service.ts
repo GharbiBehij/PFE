@@ -13,7 +13,7 @@ import {
 } from '@prisma/client';
 import { RetryableError, TerminalError } from '../Queue/utils/errors';
 import { WalletJobData } from 'src/esim/interfaces/wallet-job.interface';
-import { AuditLogService } from 'src/ProvisionningEvent/AuditLog.service';
+import { AuditLogService } from 'src/AuditLog/AuditLog.service';
 
 const IN_FLIGHT_WINDOW_MS = 60 * 1000;
 
@@ -75,7 +75,6 @@ export class WalletWorkerService {
           throw new Error('IN_FLIGHT');
         }
 
-
         const user = await tx.user.findUnique({
           where: { id: userId },
           select: { id: true, balance: true },
@@ -133,10 +132,10 @@ export class WalletWorkerService {
         );
       }
       if (err.code === 'P2002') {
-    throw new RetryableError(
-      'Concurrent attempt claim detected — will retry after cooldown',
-    );
-  }
+        throw new RetryableError(
+          'Concurrent attempt claim detected — will retry after cooldown',
+        );
+      }
       if (err instanceof TerminalError) {
         await this.auditLogService.log({
           transactionId,

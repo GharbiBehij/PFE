@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -11,9 +13,11 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useTransactionById } from '../../hooks/client/usePayment';
+import { useEsimSocket } from '../../hooks/useEsimSocket';
+import { useToast } from '../../context/ToastContext';
 import type { HomeStackParamList } from '../../navigation/types';
 import type { TransactionStatus } from '../../types/payment';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { colors, radii, shadows, sizes, spacing, typography } from '../../theme';
 
 // SLOW_THRESHOLD_MS is a placeholder constant
 // TODO: replace with median durationMs from AuditLog analytics
@@ -22,6 +26,7 @@ const SLOW_THRESHOLD_MS = 8000;
 
 const TERMINAL_STATUSES: TransactionStatus[] = [
   'COMPLETED',
+  'SUCCEEDED',
   'FAILED',
   'EXPIRED',
   'REFUNDED',
@@ -34,7 +39,56 @@ const getStatusMessage = (
   status: TransactionStatus,
   attemptNumber: number | null | undefined,
   slow: boolean,
+  mode: 'purchase' | 'topup' = 'purchase',
 ): { title: string; subtitle: string } => {
+  if (mode === 'topup') {
+    switch (status) {
+      case 'PENDING_PAYMENT':
+        return {
+          title: 'Verifying top-up payment...',
+          subtitle: 'We are confirming your payment',
+        };
+      case 'PAID':
+        return {
+          title: 'Payment confirmed',
+          subtitle: 'Applying your top-up now',
+        };
+      case 'PROVISIONING':
+      case 'PROCESSING':
+        return slow
+          ? {
+              title: 'Applying your top-up...',
+              subtitle: 'This is taking a bit longer than usual',
+            }
+          : {
+              title: 'Applying your top-up...',
+              subtitle: attemptNumber && attemptNumber > 1
+                ? `Retry attempt ${attemptNumber} in progress`
+                : 'Updating your eSIM data balance',
+            };
+      case 'COMPLETED':
+        return {
+          title: 'Top-up completed',
+          subtitle: 'Your new data is now available',
+        };
+      case 'FAILED':
+        return {
+          title: 'Top-up failed',
+          subtitle: 'We could not apply your top-up',
+        };
+      case 'EXPIRED':
+        return {
+          title: 'Session expired',
+          subtitle: 'Payment window has expired',
+        };
+      default:
+        return {
+          title: 'Processing top-up...',
+          subtitle: 'Please wait',
+        };
+    }
+  }
+
   switch (status) {
     case 'PENDING_PAYMENT':
       return {
@@ -94,27 +148,100 @@ const getStatusMessage = (
   }
 };
 
-const activeDotIndex = (attemptNumber: number | null | undefined): number => {
-  if (!attemptNumber || attemptNumber <= 1) return 0;
-  if (attemptNumber === 2) return 1;
-  return 2;
+// Active dot index follows the step, capped at index 2 for the final step
+const getActiveDotIndex = (status: TransactionStatus): number => {
+  switch (status) {
+    case 'PENDING_PAYMENT':
+      return 0;
+    case 'PAID':
+      return 1;
+    default:
+      return 2;
+  }
 };
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'ProcessingModal'>;
 
 export const ProcessingModal = ({ navigation, route }: Props) => {
-  const { transactionId, channel } = route.params;
+  const { transactionId, channel, mode = 'purchase', esimId } = route.params;
 
   const [shouldPoll, setShouldPoll] = useState(true);
-  const { data: transaction } = useTransactionById(String(transactionId), shouldPoll ? 3000 : false);
+  const { data: transaction } = useTransactionById(String(transactionId), shouldPoll ? 2000 : false);
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Disable iOS swipe-back gesture to prevent double purchase
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: false });
+  }, [navigation]);
+
+  // Block Android hardware back button during processing
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (!TERMINAL_STATUSES.includes(transaction?.status ?? 'PENDING_PAYMENT')) {
+          return true; // consume event, block back
+        }
+        return false;
+      });
+      return () => subscription.remove();
+    }, [transaction?.status]),
+  );
+
+  // Socket.IO — primary notification path; polling above is the fallback
+  useEsimSocket({
+    onActivated: () => {
+      if (mode === 'topup') return;
+      setShouldPoll(false);
+      showToast({
+        type: 'success',
+        title: 'eSIM activée !',
+        message: 'Votre eSIM est prête à être installée.',
+        durationMs: 2500,
+      });
+      // Invalidate all relevant caches before navigating to EsimSuccess
+      queryClient.invalidateQueries({ queryKey: ['transaction', String(transactionId)] });
+      queryClient.invalidateQueries({ queryKey: ['esims'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      navigation.replace('EsimSuccess', { transactionId, channel });
+    },
+    onFailed: ({ transactionId: failedTxId }) => {
+      setShouldPoll(false);
+      showToast({
+        type: 'error',
+        title: 'Activation échouée',
+        message: "Nous n'avons pas pu activer votre eSIM.",
+        durationMs: 3500,
+      });
+      navigation.replace('EsimFailed', { transactionId: failedTxId });
+    },
+    onTopupSuccess: ({ esimId: topupEsimId }) => {
+      if (mode !== 'topup') return;
+      setShouldPoll(false);
+      showToast({
+        type: 'success',
+        title: 'Recharge effectuée !',
+        message: 'Vos données ont été ajoutées à votre eSIM.',
+        durationMs: 2500,
+      });
+      const targetEsimId = esimId ?? String(topupEsimId);
+      queryClient.invalidateQueries({ queryKey: ['esims'] });
+      queryClient.invalidateQueries({ queryKey: ['esims', targetEsimId] });
+      (navigation.getParent() as any)?.navigate('EsimsTab', {
+        screen: 'EsimConsumption',
+        params: { esimId: targetEsimId },
+      });
+      navigation.goBack();
+    },
+  });
 
   const status: TransactionStatus = transaction?.status ?? 'PENDING_PAYMENT';
   const attemptNumber = transaction?.attemptNumber ?? null;
   const durationMs = transaction?.durationMs ?? null;
   const slow = isSlow(durationMs);
-  const { title, subtitle } = getStatusMessage(status, attemptNumber, slow);
+  const { title, subtitle } = getStatusMessage(status, attemptNumber, slow, mode);
 
-  // Rotation animation (airplane)
+  // Rotation animation (airplane icon, steps 1→3)
   const rotation = useSharedValue(0);
   const iconScale = useSharedValue(1);
   const iconTranslateX = useSharedValue(0);
@@ -122,7 +249,7 @@ export const ProcessingModal = ({ navigation, route }: Props) => {
   const dotScale = useSharedValue(1);
 
   const isTerminal = TERMINAL_STATUSES.includes(status);
-  const isCompleted = status === 'COMPLETED';
+  const isCompleted = status === 'COMPLETED' || status === 'SUCCEEDED';
   const isFailed = status === 'FAILED';
 
   useEffect(() => {
@@ -154,16 +281,39 @@ export const ProcessingModal = ({ navigation, route }: Props) => {
     }
   }, [isCompleted, isFailed]);
 
-  // Stop polling and navigate away once terminal
+  // Stop polling and navigate away once a significant status is reached
   useEffect(() => {
+    // B2C: payment confirmed → hand off to PaymentSuccess which continues polling
+    if (mode === 'purchase' && status === 'PAID') {
+      setShouldPoll(false);
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      navigation.replace('PaymentSuccess', { transactionId, channel });
+      return;
+    }
+
     if (!TERMINAL_STATUSES.includes(status)) return;
     setShouldPoll(false);
 
     if (isCompleted) {
-      const timer = setTimeout(() => {
-        navigation.replace('EsimSuccess', { transactionId, channel });
-      }, 1500);
-      return () => clearTimeout(timer);
+      if (mode === 'topup') {
+        const targetEsimId = esimId ?? '';
+        queryClient.invalidateQueries({ queryKey: ['esims'] });
+        if (targetEsimId) {
+          queryClient.invalidateQueries({ queryKey: ['esims', targetEsimId] });
+        }
+        (navigation.getParent() as any)?.navigate('EsimsTab', {
+          screen: 'EsimConsumption',
+          params: { esimId: targetEsimId },
+        });
+        navigation.goBack();
+        return;
+      }
+      // purchase mode COMPLETED/SUCCEEDED (B2B2C skips PAID, arrives here directly)
+      queryClient.invalidateQueries({ queryKey: ['transaction', String(transactionId)] });
+      queryClient.invalidateQueries({ queryKey: ['esims'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      navigation.replace('EsimSuccess', { transactionId, channel });
+      return;
     }
     if (isFailed) {
       navigation.replace('EsimFailed', { transactionId });
@@ -173,12 +323,12 @@ export const ProcessingModal = ({ navigation, route }: Props) => {
     }
   }, [status]);
 
-  // Dot pulse
+  // Dot pulse (~300ms matches the smooth transition spec)
   useEffect(() => {
     dotScale.value = withRepeat(
       withSequence(
-        withTiming(1.3, { duration: 500 }),
-        withTiming(1, { duration: 500 }),
+        withTiming(1.3, { duration: 300 }),
+        withTiming(1, { duration: 300 }),
       ),
       -1,
       false,
@@ -198,9 +348,9 @@ export const ProcessingModal = ({ navigation, route }: Props) => {
   }));
 
   const iconColor = isCompleted
-    ? colors.success?.DEFAULT ?? '#22C55E'
+    ? colors.success.DEFAULT
     : isFailed
-    ? colors.error?.DEFAULT ?? '#EF4444'
+    ? colors.error.DEFAULT
     : colors.primary.DEFAULT;
 
   const iconName = isCompleted
@@ -209,13 +359,14 @@ export const ProcessingModal = ({ navigation, route }: Props) => {
     ? 'close-circle'
     : 'airplane';
 
-  const activeDot = activeDotIndex(attemptNumber);
+  const activeDot = getActiveDotIndex(status);
 
   return (
     <View style={styles.backdrop}>
+      <StatusBar barStyle="light-content" />
       <View style={styles.card}>
         <Animated.View style={iconAnimatedStyle}>
-          <Ionicons name={iconName as any} size={48} color={iconColor} />
+          <Ionicons name={iconName as any} size={sizes.icon.xxl} color={iconColor} />
         </Animated.View>
 
         <Text style={styles.title}>{title}</Text>
@@ -231,6 +382,7 @@ export const ProcessingModal = ({ navigation, route }: Props) => {
             );
           })}
         </View>
+
       </View>
     </View>
   );
@@ -243,16 +395,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlayProcessing,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: spacing.xl,
   },
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.xxl,
     padding: spacing.xl,
-    width: '80%',
-    maxWidth: 320,
+    width: '82%',
+    maxWidth: 300,
     alignItems: 'center',
     ...shadows.high,
   },
@@ -275,9 +428,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: sizes.decoration.processingDot,
+    height: sizes.decoration.processingDot,
+    borderRadius: radii.xs,
   },
   dotActive: {
     backgroundColor: colors.primary.DEFAULT,

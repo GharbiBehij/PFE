@@ -3,26 +3,23 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   ParseIntPipe,
   Post,
   Query,
   Req,
+  Res,
   Redirect,
   UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { TransactionStatus } from '@prisma/client';
-import { Request } from 'express';
 import { JwtAuthGuard } from 'src/auth/Guards/JwtAuthGuard';
-import { ErrorResponseDto } from '../Common/dto/error-response.dto';
-import { IdempotencyGuard } from '../Common/guards/idempotency.guard';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { PaymentResponseDto } from './dto/payment-response.dto';
+import { Request, Response } from 'express';
 import { PaymentService } from './payment.service';
 import { TransactionService } from '../transaction/transaction.service';
+import { PaymentVerifyDto } from './dto/payment-verify.dto';
 
-@ApiTags('payment')
 @Controller('payment')
 export class PaymentController {
   constructor(
@@ -30,37 +27,22 @@ export class PaymentController {
     private readonly transactionService: TransactionService,
   ) {}
 
+  // ── INIT PAYMENT ─────────────────────────────────────
   @Post()
-  @UseGuards(IdempotencyGuard)
-  @ApiOperation({ summary: 'Initiate payment for a transaction' })
-  @ApiQuery({
-    name: 'transactionId',
-    type: Number,
-    required: true,
-    example: 9001,
-  })
-  @ApiResponse({ status: 201, type: PaymentResponseDto })
-  @ApiResponse({ status: 400, type: ErrorResponseDto })
-  async create(
-    @Body() _createPaymentDto: CreatePaymentDto,
-    @Query('transactionId', ParseIntPipe) _transactionId: number,
-    @Req() _req: Request,
-  ) {
-    return this.transactionService
-      .findOne(_transactionId)
-      .then((transaction) => {
-        if (!transaction) {
-          throw new BadRequestException('Transaction not found');
-        }
-        return this.paymentService.initiatePayment(transaction);
-      });
+  @UseGuards(JwtAuthGuard)
+  async create(@Query('transactionId', ParseIntPipe) transactionId: number) {
+    const transaction = await this.transactionService.findOne(transactionId);
+
+    if (!transaction) {
+      throw new BadRequestException('Transaction not found');
+    }
+
+    return this.paymentService.initiatePayment(transaction);
   }
 
+  // ── VERIFY (POLLING - READ ONLY) ─────────────────────
   @Get('verify')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Verify payment status after ClicToPay redirect' })
-  @ApiQuery({ name: 'transactionId', type: Number, required: true })
-  @ApiResponse({ status: 200, description: 'Payment verification result' })
   async verifyPayment(
     @Query('transactionId', ParseIntPipe) transactionId: number,
     @Req() req: Request,
@@ -68,36 +50,26 @@ export class PaymentController {
     const userId = (req.user as any).userId;
 
     const transaction = await this.transactionService.findOne(transactionId);
+
     if (!transaction || transaction.userId !== userId) {
       throw new BadRequestException('Transaction not found');
     }
 
-    const result = await this.paymentService.verifyPayment(transactionId);
-
-    if (result.paid) {
-      await this.transactionService.transition(
-        transactionId,
-        TransactionStatus.COMPLETED,
-        'payment-controller',
-      );
-      // TODO: enqueue eSIM provisioning job here if not already handled by existing verification flow.
-    }
-
-    if (result.gatewayStatus === 6) {
-      await this.transactionService.transition(
-        transactionId,
-        TransactionStatus.FAILED,
-        'payment-controller',
-      );
-    }
-
     return {
       transactionId,
-      paid: result.paid,
-      status: result.status,
-      maskedPan: result.pan,
+      status: transaction.status,
     };
   }
+
+  // ── VERIFY + PROCESS (AFTER REDIRECT) ────────────────
+  @Post('verify')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async verifyAndProcess(@Body() dto: PaymentVerifyDto) {
+    return this.paymentService.verifyAndProcess(dto.orderId);
+  }
+
+  // ── REDIRECT SUCCESS ─────────────────────────────────
   @Get('redirect/success')
   @SkipThrottle()
   @Redirect()
@@ -108,6 +80,7 @@ export class PaymentController {
     };
   }
 
+  // ── REDIRECT FAIL ────────────────────────────────────
   @Get('redirect/fail')
   @SkipThrottle()
   @Redirect()
@@ -117,5 +90,27 @@ export class PaymentController {
       statusCode: 302,
     };
   }
+
+  // ── MOCK PAYMENT PAGE (dev/mock mode only) ───────────
+  // When PROVIDER_TYPE=mock, ClicToPayService.registerOrder() returns a formUrl
+  // pointing here. This page auto-redirects to the success callback so the full
+  // B2C flow can be exercised without a real gateway.
+  @Get('mock/pay')
+  @SkipThrottle()
+  mockPay(
+    @Query('orderId') orderId: string,
+    @Query('returnUrl') returnUrl: string,
+    @Res() res: Response,
+  ) {
+    const safeReturn = decodeURIComponent(returnUrl || '');
+    const separator = safeReturn.includes('?') ? '&' : '?';
+    const redirect = `${safeReturn}${separator}orderId=${orderId ?? ''}`;
+    res.send(
+      `<html><head><meta http-equiv="refresh" content="0;url=${redirect}"></head>` +
+      `<body style="font-family:sans-serif;text-align:center;padding:40px">` +
+      `<p>Paiement mock en cours…</p></body></html>`,
+    );
   }
 
+}
+// Webhook is handled by WebhookController in Webhook/webhook.controller.ts
